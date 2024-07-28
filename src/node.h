@@ -1,38 +1,43 @@
-//
-// Created by caomaobay on 2024/7/17.
-//
-
-#ifndef NODE_H
-#define NODE_H
-
-#include <functional>
-#include <iostream>
+#include <armadillo>
 #include <vector>
-#include <memory>
+#include <functional>
 
 namespace MyBlob {
+
     class Node : public std::enable_shared_from_this<Node> {
     public:
-        double value;
-        double grad;
+        arma::mat value;
+        arma::mat grad;
         std::vector<std::shared_ptr<Node>> parents;
         std::function<void()> grad_fn;
 
-        explicit Node(const double value) : value(value), grad(0) {}
+        explicit Node(const arma::mat& value) : value(value), grad(value.n_rows, value.n_cols, arma::fill::zeros) {}
 
+        // Arithmetic operators for Node objects
         std::shared_ptr<Node> operator+(const std::shared_ptr<Node>& rhs);
-        std::shared_ptr<Node> operator-(const std::shared_ptr<Node>& rhs);
         std::shared_ptr<Node> operator*(const std::shared_ptr<Node>& rhs);
+        std::shared_ptr<Node> operator-(const std::shared_ptr<Node>& rhs);
         std::shared_ptr<Node> operator/(const std::shared_ptr<Node>& rhs);
+        std::shared_ptr<Node> dot(const std::shared_ptr<Node>& rhs);
 
+        // Unary functions
         std::shared_ptr<Node> sin();
         std::shared_ptr<Node> cos();
         std::shared_ptr<Node> exp();
         std::shared_ptr<Node> log();
         std::shared_ptr<Node> sqrt();
 
+        // Arithmetic operators for Node and constant
+        std::shared_ptr<Node> operator+(double rhs);
+        std::shared_ptr<Node> operator-(double rhs);
+        std::shared_ptr<Node> operator*(double rhs);
+        std::shared_ptr<Node> operator/(double rhs);
+
+        static std::shared_ptr<Node> create(const arma::mat& value) {
+            return std::make_shared<Node>(value);
+        }
+
         static void backward(const std::shared_ptr<Node>& output_node);
     };
-}
 
-#endif // NODE_H
+} // namespace MyBlob

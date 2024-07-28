@@ -1,19 +1,29 @@
-#include "node.h"
 #include <iostream>
-
-
+#include <armadillo>
+#include "node.h"
+#include "loss_functions.h"
+using namespace MyBlob;
 int main() {
+    // 创建节点并初始化值为矩阵
+    arma::mat x_value = arma::ones<arma::mat>(2, 2) * 2;
 
-    auto const x = std::make_shared<MyBlob::Node>(1.0);
+    const auto x = std::make_shared<MyBlob::Node>(x_value);
 
-    auto const y = *x * x;
-    auto const z = *y*y;
+    auto y = *x * x;
 
-    MyBlob::Node::backward(z);
+
+    auto z = *y + 3;
+
+
+    auto w = *z * 2;
+
+
+    MyBlob::Node::backward(w);
+
 
     // 输出梯度
-    std::cout << "∂z/∂x = " << x->grad << std::endl;
+    std::cout << "∂L/∂x = " << x->grad << std::endl;
+    std::cout << "∂L/∂y = " << y->grad << std::endl;
 
-    // (x * y) ** 2 对 x 求导 ∂z/∂x = ∂y/∂x * ∂z/∂y  = 2x  * 2y = (2 * 1) * (2 * 1) = 4
     return 0;
 }
