@@ -2,7 +2,7 @@
 #include <unordered_set>
 #include <armadillo>
 
-using namespace MyBlob;
+using namespace Breeze;
 
 // Overload for addition with a constant on the right-hand side
 std::shared_ptr<Node> Node::operator+(const double rhs) {

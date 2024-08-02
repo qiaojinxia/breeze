@@ -7,7 +7,7 @@
 
 #include <armadillo>
 
-namespace MyBlob {
+namespace Breeze {
     template<typename T>
     class LossFunction {
     public:

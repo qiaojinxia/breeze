@@ -2,7 +2,7 @@
 #include <vector>
 #include <functional>
 
-namespace MyBlob {
+namespace Breeze {
 
     class Node : public std::enable_shared_from_this<Node> {
     public:
@@ -40,4 +40,4 @@ namespace MyBlob {
         static void backward(const std::shared_ptr<Node>& output_node);
     };
 
-} // namespace MyBlob
+} // namespace Breeze

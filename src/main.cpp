@@ -1,13 +1,14 @@
 #include <iostream>
 #include <armadillo>
 #include "node.h"
-#include "loss_functions.h"
-using namespace MyBlob;
+#include "CPUTensor.h"
+
+using namespace Breeze;
 int main() {
     // 创建节点并初始化值为矩阵
     arma::mat x_value = arma::ones<arma::mat>(2, 2) * 2;
 
-    const auto x = std::make_shared<MyBlob::Node>(x_value);
+    const auto x = std::make_shared<Node>(x_value);
 
     auto y = *x * x;
 
@@ -18,8 +19,16 @@ int main() {
     auto w = *z * 2;
 
 
-    MyBlob::Node::backward(w);
+    Node::backward(w);
 
+    const CPUTensor<float> tensor1({2, 3, 7, 4, 5});
+    tensor1.fill(2.0);
+
+    const CPUTensor<float> tensor2({2, 3, 7, 5, 6});
+    tensor2.fill(3.0);
+
+    const auto tensor3 = tensor1 * tensor2;
+    std::cout << *tensor3 << std::endl;
 
     // 输出梯度
     std::cout << "∂L/∂x = " << x->grad << std::endl;
