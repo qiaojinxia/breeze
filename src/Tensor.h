@@ -24,7 +24,12 @@ namespace Breeze {
         Device device;
         std::shared_ptr<TensorOps<T>> ops;
     public:
+        virtual std::shared_ptr<Tensor> operator+(const Tensor& other) const = 0 ;
+        virtual std::shared_ptr<Tensor> operator-(const Tensor& other) const = 0 ;
         virtual std::shared_ptr<Tensor> operator*(const Tensor& other) const = 0 ;
+        virtual std::shared_ptr<Tensor> operator/(const Tensor& other) const = 0 ;
+
+        virtual std::shared_ptr<Tensor> matmul(const Tensor& other) const = 0 ;
 
         Tensor(const std::vector<size_t>& shape, const Device device)
             : shape(shape), device(device) {

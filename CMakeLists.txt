@@ -11,6 +11,10 @@ find_path(OpenBLAS_INCLUDE_DIR NAMES cblas.h PATHS /usr/local/opt/openblas/inclu
 find_library(OpenBLAS_LIB NAMES openblas PATHS /usr/local/opt/openblas/lib)
 
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -mavx")
+
+add_compile_definitions(ACCELERATE_NEW_LAPACK ACCELERATE_LAPACK_ILP64)
+
 add_executable(breeze src/main.cpp
         src/node.cpp
         src/node.h
@@ -24,11 +28,7 @@ add_executable(breeze src/main.cpp
         src/CPUTensor.cpp
         src/CPUTensor.h)
 
-if(APPLE)
-    add_definitions(-DACCELERATE_NEW_LAPACK)
-    add_definitions(-DACCELERATE_LAPACK_ILP64)
-endif()
-
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DACCELERATE_NEW_LAPACK")
 # 链接 Armadillo 库
 target_link_libraries(breeze ${ARMADILLO_LIBRARIES})
 target_link_libraries(breeze ${OpenBLAS_LIB})

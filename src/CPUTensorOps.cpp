@@ -1,36 +1,183 @@
 // Created by mac on 2024/7/31.
 //
-
 #include "CPUTensorOps.h"
 #include "CPUTensor.h"
 #include <cblas.h>
+#include <numeric>
+#include <immintrin.h>
 
 namespace Breeze {
-
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::add(const Tensor<T>& a, const Tensor<T>& b) const {
-        // Verify that the dimensions of both tensors are compatible for addition
+        // 验证两个张量的维度是否兼容
         if (a.get_shape() != b.get_shape()) {
             throw std::invalid_argument("Tensor shapes must be equal for addition.");
         }
 
-        // Create a new tensor for the result with the same shape as the input tensors
+        // 创建一个新的张量来存储结果，形状与输入张量相同
         auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
 
-        // Number of elements (flattened size)
-        const size_t num_elements = a.size();  // Assuming size() calculates the total number of elements
+        // 使用 std::accumulate 计算总元素数
+        const size_t num_elements = std::accumulate(
+            a.get_shape().begin(), a.get_shape().end(),
+            static_cast<size_t>(1), std::multiplies<size_t>()
+        );
 
-        // Using cblas_axpy for addition
-        // y := a*x + y where a = 1, x = b.data(), y = result.data()
+        // 使用 BLAS 函数进行加法运算
         T alpha = 1.0;
         if constexpr (std::is_same_v<T, float>) {
-            cblas_saxpy(static_cast<int>(num_elements), alpha, b.data(), 1, result->data(), 1);
+            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_saxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
         } else if constexpr (std::is_same_v<T, double>) {
-            cblas_daxpy(static_cast<int>(num_elements), alpha, b.data(), 1, result->data(), 1);
+            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_daxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
+        } else {
+            // 对于非浮点类型，使用标准 C++ 循环
+            const T* a_data = a.data();
+            const T* b_data = b.data();
+            T* result_data = result->data();
+#pragma omp parallel for
+            for (size_t i = 0; i < num_elements; ++i) {
+                result_data[i] = a_data[i] + b_data[i];
+            }
         }
 
         return result;
     }
+
+
+    // 减法实现
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::subtract(const Tensor<T>& a, const Tensor<T>& b) const {
+        if (a.get_shape() != b.get_shape()) {
+            throw std::invalid_argument("Tensor shapes must be equal for subtraction.");
+        }
+
+        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
+
+        const size_t num_elements = std::accumulate(
+            a.get_shape().begin(), a.get_shape().end(),
+            static_cast<size_t>(1), std::multiplies<>()
+        );
+
+        T alpha = -1.0;
+        if constexpr (std::is_same_v<T, float>) {
+            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_saxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
+        } else if constexpr (std::is_same_v<T, double>) {
+            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_daxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
+        } else {
+            const T* a_data = a.data();
+            const T* b_data = b.data();
+            T* result_data = result->data();
+#pragma omp parallel for
+            for (size_t i = 0; i < num_elements; ++i) {
+                result_data[i] = a_data[i] - b_data[i];
+            }
+        }
+
+        return result;
+    }
+
+
+    // 乘法实现（元素wise乘法，不是矩阵乘法）
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::multiply(const Tensor<T>& a, const Tensor<T>& b) const {
+        if (a.get_shape() != b.get_shape()) {
+            throw std::invalid_argument("Tensor shapes must be equal for element-wise multiplication.");
+        }
+
+        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
+
+        const size_t num_elements = std::accumulate(
+            a.get_shape().begin(), a.get_shape().end(),
+            static_cast<size_t>(1), std::multiplies<>()
+        );
+
+        if constexpr (std::is_same_v<T, float>) {
+            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_stbmv(CblasRowMajor, CblasUpper, CblasNoTrans, CblasNonUnit,
+                        num_elements, 0, b.data(), 1, result->data(), 1);
+        } else if constexpr (std::is_same_v<T, double>) {
+            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
+            cblas_dtbmv(CblasRowMajor, CblasUpper, CblasNoTrans, CblasNonUnit,
+                        num_elements, 0, b.data(), 1, result->data(), 1);
+        } else {
+            const T* a_data = a.data();
+            const T* b_data = b.data();
+            T* result_data = result->data();
+#pragma omp parallel for
+            for (size_t i = 0; i < num_elements; ++i) {
+                result_data[i] = a_data[i] * b_data[i];
+            }
+        }
+
+        return result;
+    }
+
+
+    // 除法实现（元素wise除法）
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::divide(const Tensor<T>& a, const Tensor<T>& b) const {
+        if (a.get_shape() != b.get_shape()) {
+            throw std::invalid_argument("Tensor shapes must be equal for element-wise division.");
+        }
+
+        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
+        const size_t num_elements = std::accumulate(a.get_shape().begin(), a.get_shape().end(),
+                                                    static_cast<size_t>(1), std::multiplies<size_t>());
+
+        const T* a_data = a.data();
+        const T* b_data = b.data();
+        T* result_data = result->data();
+
+        if constexpr (std::is_same_v<T, float>) {
+#pragma omp parallel for
+            size_t i = 0;
+            for (; i + 8 <= num_elements; i += 8) {
+                const __m256 a_vec = _mm256_loadu_ps(a_data + i);
+                const __m256 b_vec = _mm256_loadu_ps(b_data + i);
+                if (_mm256_movemask_ps(_mm256_cmp_ps(b_vec, _mm256_setzero_ps(), _CMP_EQ_OQ)) != 0) {
+                    throw std::runtime_error("Division by zero encountered.");
+                }
+                __m256 result_vec = _mm256_div_ps(a_vec, b_vec);
+                _mm256_storeu_ps(result_data + i, result_vec);
+            }
+            // 处理剩余的元素
+            for (; i < num_elements; ++i) {
+                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
+                result_data[i] = a_data[i] / b_data[i];
+            }
+        } else if constexpr (std::is_same_v<T, double>) {
+#pragma omp parallel for
+            size_t i = 0;
+            for (; i + 4 <= num_elements; i += 4) {
+                const __m256d a_vec = _mm256_loadu_pd(a_data + i); // 如果数据对齐，可以使用 _mm256_load_pd
+                const __m256d b_vec = _mm256_loadu_pd(b_data + i);
+                if (_mm256_movemask_pd(_mm256_cmp_pd(b_vec, _mm256_setzero_pd(), _CMP_EQ_OQ)) != 0) {
+                    throw std::runtime_error("Division by zero encountered.");
+                }
+                const __m256d result_vec = _mm256_div_pd(a_vec, b_vec);
+                _mm256_storeu_pd(result_data + i, result_vec);
+            }
+
+            // 处理剩余的元素
+            for (; i < num_elements; ++i) {
+                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
+                result_data[i] = a_data[i] * (1.0 / b_data[i]);
+            }
+        } else {
+#pragma omp parallel for
+            for (size_t i = 0; i < num_elements; ++i) {
+                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
+                result_data[i] = a_data[i] / b_data[i];
+            }
+        }
+
+        return result;
+    }
+
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::matmul(const Tensor<T>& a, const Tensor<T>& b) const {
@@ -68,12 +215,13 @@ namespace Breeze {
         return result;
     }
 
+
 template<typename T>
 void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,
                                              const std::vector<size_t>& b_shape,
                                              const std::vector<size_t>& a_strides, const std::vector<size_t>& b_strides,
                                              const std::vector<size_t>& result_strides) const {
-        size_t depth = a_shape.size() - 2;
+        const size_t depth = a_shape.size() - 2;
         size_t m = a_shape[depth];
         size_t k = a_shape[depth + 1];
         size_t n = b_shape[depth + 1];
@@ -91,7 +239,7 @@ void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, 
         }
 
         // Parallelize using OpenMP
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t idx = 0; idx < num_matrices; ++idx) {
             size_t a_offset = 0;
             size_t b_offset = 0;
@@ -141,3 +289,4 @@ template<typename T>
     template class CPUTensorOps<float>;
     template class CPUTensorOps<double>;
 };
+

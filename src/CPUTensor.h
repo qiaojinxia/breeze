@@ -31,7 +31,14 @@ namespace Breeze {
 
         void fill(T value) const override;
 
+        std::shared_ptr<Tensor<T>> operator+(const Tensor<T>& rhs) const override;
+        std::shared_ptr<Tensor<T>> operator-(const Tensor<T>& rhs) const override;
         std::shared_ptr<Tensor<T>> operator*(const Tensor<T>& rhs) const override;
+        std::shared_ptr<Tensor<T>> operator/(const Tensor<T>& rhs) const override;
+
+        std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
+
+
 
     private:
         AlignedDataBlob<T> blob;

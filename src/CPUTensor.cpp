@@ -7,8 +7,28 @@
 
 namespace Breeze {
     template<typename T>
-     std::shared_ptr<Tensor<T>> CPUTensor<T>::operator*(const Tensor<T>& rhs) const {
+     std::shared_ptr<Tensor<T>> CPUTensor<T>::matmul(const Tensor<T>& rhs) const {
         return this->ops->matmul(*this, rhs);
+    }
+
+    template<typename T>
+     std::shared_ptr<Tensor<T>> CPUTensor<T>::operator+(const Tensor<T>& rhs) const {
+        return this->ops->add(*this, rhs);
+    }
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::operator-(const Tensor<T>& rhs) const {
+        return this->ops->subtract(*this, rhs);
+    }
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::operator*(const Tensor<T>& rhs) const {
+        return this->ops->multiply(*this, rhs);
+    }
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::operator/(const Tensor<T>& rhs) const {
+        return this->ops->divide(*this, rhs);
     }
 
     template<typename T>
