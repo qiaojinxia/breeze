@@ -6,6 +6,8 @@
 #define CPUTENSOROPS_H
 #include <vector>
 #include "TensorOps.h"
+#include "Blob.h"
+
 namespace Breeze {
     template<typename T>
     class CPUTensorOps final: public TensorOps<T>{
@@ -17,6 +19,8 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> multiply(const Tensor<T>& a, const Tensor<T>& b) const override;
 
         [[nodiscard]] std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& a, const Tensor<T>& b) const override;
+
+        void broadcastTensors(Tensor<T>& a, Tensor<T>& b) override;
         ~CPUTensorOps() override= default;
     private:
         void multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,

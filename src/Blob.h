@@ -1,21 +1,23 @@
-#ifndef AlignedDataBlob_H
-#define AlignedDataBlob_H
+#ifndef Blob_H
+#define Blob_H
 #include <iostream>
 #include <vector>
 
 
 namespace Breeze {
     template <typename T>
-    class AlignedDataBlob {
+    class Blob {
     public:
-        explicit AlignedDataBlob(const std::vector<size_t>& shape);
+        explicit Blob(const std::vector<size_t>& shape);
+        explicit Blob(size_t total_size);
 
         // 禁用拷贝构造和赋值操作符
-        AlignedDataBlob(const AlignedDataBlob&) = delete;
-        AlignedDataBlob& operator=(const AlignedDataBlob&) = delete;
+        Blob(const Blob&) = delete;
+        Blob& operator=(const Blob&) = delete;
 
-        AlignedDataBlob(AlignedDataBlob&& other) noexcept;
-        AlignedDataBlob& operator=(AlignedDataBlob&& other) noexcept;
+
+        Blob(Blob&& other) noexcept;
+        Blob& operator=(Blob&& other) noexcept;
 
         T* getData() { return data; }
         const T* getData() const { return data; }
@@ -38,24 +40,25 @@ namespace Breeze {
 
         void print(std::ostream& os = std::cout) const;
 
-        friend std::ostream& operator<<(std::ostream& os, const AlignedDataBlob& blob) {
+        friend std::ostream& operator<<(std::ostream& os, const Blob& blob) {
             blob.print(os);
             return os;
         }
 
         // 调整形状
         void reshape(const std::vector<size_t>& new_shape);
-
+        void setDataWithOwnership(std::shared_ptr<T[]> new_data,const std::vector<size_t>& new_shape);
     private:
         T* data;
-        std::unique_ptr<T[]> buffer;
+        std::shared_ptr<T[]> buffer;
         std::vector<size_t> shape;
-        size_t total_size;
+        size_t total_size = 0;
 
-        static std::pair<std::unique_ptr<T[]>, T*> allocate_aligned(size_t size, size_t alignment);
+        static std::pair<std::shared_ptr<T[]>, T*> allocate_aligned(size_t size, size_t alignment);
         [[nodiscard]] size_t calculateIndex(const std::vector<size_t>& indices) const;
-        static_assert(std::is_arithmetic_v<T>, "AlignedDataBlob elements must be of arithmetic type");
+        static_assert(std::is_arithmetic_v<T>, "Blob elements must be of arithmetic type");
     };
+
 }
 
-#endif //AlignedDataBlob_H
+#endif //Blob_H

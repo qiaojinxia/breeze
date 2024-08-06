@@ -8,7 +8,7 @@
 namespace Breeze {
     // 前向声明
     template<typename T>
-    class AlignedDataBlob;
+    class Blob;
 
     // 设备枚举
     enum class Device {
@@ -24,12 +24,14 @@ namespace Breeze {
         Device device;
         std::shared_ptr<TensorOps<T>> ops;
     public:
-        virtual std::shared_ptr<Tensor> operator+(const Tensor& other) const = 0 ;
-        virtual std::shared_ptr<Tensor> operator-(const Tensor& other) const = 0 ;
-        virtual std::shared_ptr<Tensor> operator*(const Tensor& other) const = 0 ;
-        virtual std::shared_ptr<Tensor> operator/(const Tensor& other) const = 0 ;
+        virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
+        virtual std::shared_ptr<Tensor> operator-(const Tensor& rhs) const = 0;
+        virtual std::shared_ptr<Tensor> operator*(const Tensor& rhs) const = 0;
+        virtual std::shared_ptr<Tensor> operator/(const Tensor& rhs) const = 0;
 
-        virtual std::shared_ptr<Tensor> matmul(const Tensor& other) const = 0 ;
+        virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
+
+        virtual void broadcast(Tensor& rhs) = 0;
 
         Tensor(const std::vector<size_t>& shape, const Device device)
             : shape(shape), device(device) {
@@ -42,6 +44,8 @@ namespace Breeze {
         // 纯虚函数
         virtual T* data() = 0;
         virtual const T* data() const = 0;
+        virtual void setData(std::shared_ptr<Blob<T>> new_blob) = 0;
+
         [[nodiscard]] virtual size_t size() const = 0;
         virtual void to_cpu() = 0;
         virtual void to_gpu() = 0;

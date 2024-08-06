@@ -2,7 +2,7 @@
 #define CPUTENSOR_H
 
 #include "Tensor.h"
-#include "AlignedDataBlob.h"
+#include "Blob.h"
 #include <iostream>
 #include "CPUTensorOps.h"
 
@@ -11,11 +11,16 @@ namespace Breeze {
     class CPUTensor final : public Tensor<T> {
     public:
         explicit CPUTensor(const std::vector<size_t>& shape)
-            : Tensor<T>(shape, Device::CPU), blob(shape) {
+            : Tensor<T>(shape, Device::CPU), blob(std::make_shared<Blob<T>>(shape)){
             this->ops = std::make_shared<CPUTensorOps<T>>();
         }
 
         T* data() override;
+
+        void setData(std::shared_ptr<Blob<T>> new_blob) override {
+            this->shape = new_blob->getShape();
+            blob = std::move(new_blob);
+        }
 
         const T* data() const override;
 
@@ -38,10 +43,10 @@ namespace Breeze {
 
         std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
 
+        void broadcast(Tensor<T>& rhs)  override;
 
-
-    private:
-        AlignedDataBlob<T> blob;
+    protected:
+       std::shared_ptr<Blob<T>> blob;
     };
 
 }

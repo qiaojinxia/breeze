@@ -216,11 +216,11 @@ namespace Breeze {
     }
 
 
-template<typename T>
-void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,
-                                             const std::vector<size_t>& b_shape,
-                                             const std::vector<size_t>& a_strides, const std::vector<size_t>& b_strides,
-                                             const std::vector<size_t>& result_strides) const {
+    template<typename T>
+    void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,
+                                                 const std::vector<size_t>& b_shape,
+                                                 const std::vector<size_t>& a_strides, const std::vector<size_t>& b_strides,
+                                                 const std::vector<size_t>& result_strides) const {
         const size_t depth = a_shape.size() - 2;
         size_t m = a_shape[depth];
         size_t k = a_shape[depth + 1];
@@ -268,8 +268,8 @@ void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, 
         }
 }
 
-template<typename T>
-[[nodiscard]] std::vector<size_t> CPUTensorOps<T>::compute_strides(const std::vector<size_t>& shape) {
+    template<typename T>
+    [[nodiscard]] std::vector<size_t> CPUTensorOps<T>::compute_strides(const std::vector<size_t>& shape) {
         if (shape.empty()) {
             throw std::invalid_argument("Shape vector cannot be empty.");
         }
@@ -284,9 +284,82 @@ template<typename T>
         return strides;
 }
 
+    template<typename T>
+    void CPUTensorOps<T>::broadcastTensors(Tensor<T>& a, Tensor<T>& b) {
+        const std::vector<size_t>& shape1 = a.get_shape();
+        const std::vector<size_t>& shape2 = b.get_shape();
+
+        // 计算目标形状
+        std::vector<size_t> targetShape;
+        const int maxDims = static_cast<int>(std::max(shape1.size(), shape2.size()));
+        targetShape.resize(maxDims);
+
+        for (int i = 0; i < maxDims; ++i) {
+            //如果在当前没有维度 就认为是 1
+            const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
+            const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
+            if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                throw std::runtime_error("Incompatible shapes for broadcasting");
+            }
+            targetShape[maxDims - 1 - i] = std::max(static_cast<int>(dim1), static_cast<int>(dim2));
+        }
+
+        // 计算目标大小和步长
+        const size_t targetSize = std::accumulate(targetShape.begin(), targetShape.end(), 1, std::multiplies<>());
+        std::vector<int> targetStrides(maxDims);
+        int stride = 1;
+        for (int i = maxDims - 1; i >= 0; --i) {
+            targetStrides[i] = stride;
+            stride *= static_cast<int>(targetShape[i]);
+        }
+
+        // 计算输入向量的步长
+        std::vector<int> strides1(maxDims, 0), strides2(maxDims, 0);
+        stride = 1;
+        for (int i = static_cast<int>(shape1.size()) - 1; i >= 0; --i) {
+            strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride;
+            stride *= static_cast<int>(shape1[i]);
+        }
+        stride = 1;
+        for (int i = static_cast<int>(shape2.size()) - 1; i >= 0; --i) {
+            strides2[maxDims - shape2.size() + i] = (shape2[i] == 1) ? 0 : stride;
+            stride *=  static_cast<int>(shape2[i]);
+        }
+
+        // 执行广播
+        auto result1 = std::make_shared<Blob<T>>(targetShape);
+        auto result2 = std::make_shared<Blob<T>>(targetShape);
+        std::vector indices(maxDims, 0);
+
+        const auto data_a = static_cast<const T*>(a.data());
+        const auto data_b = static_cast<const T*>(b.data());
+        for (int i = 0; i < targetSize; ++i) {
+            int index1 = 0, index2 = 0;
+            //计算 每个被复制变量位置 如果1为 只能在 +0 位置 如果大于1 就是 0...j 每次取完递增++indices[j]
+            for (int j = 0; j < maxDims; ++j) {
+                index1 += indices[j] * strides1[j];
+                index2 += indices[j] * strides2[j];
+            }
+            result1->getData()[i] = data_a[index1];
+            result2->getData()[i] = data_b[index2];
+
+            // 更新索引
+            for (int j = maxDims - 1; j >= 0; --j) {
+                //当前循环维度 小于目标维度
+                if (++indices[j] < targetShape[j]) {
+                    break;
+                }
+                //从第0个开始
+                indices[j] = 0;
+            }
+        }
+        a.setData(result1);
+        b.setData(result2);
+}
 
     // Explicit template instantiation
     template class CPUTensorOps<float>;
     template class CPUTensorOps<double>;
 };
+
 

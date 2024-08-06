@@ -19,8 +19,8 @@ add_executable(breeze src/main.cpp
         src/node.cpp
         src/node.h
         src/loss_functions.h
-        src/AlignedDataBlob.cpp
-        src/AlignedDataBlob.h
+        src/Blob.cpp
+        src/Blob.h
         src/Tensor.h
         src/TensorOps.h
         src/CPUTensorOps.cpp

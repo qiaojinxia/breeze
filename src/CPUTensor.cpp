@@ -33,12 +33,12 @@ namespace Breeze {
 
     template<typename T>
     T* CPUTensor<T>::data() {
-        return blob.getData();
+        return blob->getData();
     }
 
     template<typename T>
     const T* CPUTensor<T>::data() const {
-        return blob.getData();
+        return blob->getData();
     }
 
     template<typename T>
@@ -55,24 +55,28 @@ namespace Breeze {
     template<typename T>
     void  CPUTensor<T>::resize(std::vector<size_t> shape) {
         this->shape = shape;
-        this->blob.reshape(shape);
+        this->blob->reshape(shape);
     }
 
     template<typename T>
     void  CPUTensor<T>::print(std::ostream& os) const  {
-        blob.print(os);
+        blob->print(os);
     }
 
     template<typename T>
     void  CPUTensor<T>::fill(T value) const  {
-        blob.fill(value);
+        blob->fill(value);
     }
 
     template<typename T>
     [[nodiscard]] size_t CPUTensor<T>::size() const {
-        return blob.getTotalSize();
+        return blob->getTotalSize();
     }
 
+    template<typename T>
+    void CPUTensor<T>::broadcast(Tensor<T>& rhs)  {
+        this->ops->broadcastTensors(*this,rhs);
+    }
 
     template class CPUTensor<float>;
     template class CPUTensor<double>;
