@@ -18,10 +18,7 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
 
         // 使用 std::accumulate 计算总元素数
-        const size_t num_elements = std::accumulate(
-            a.get_shape().begin(), a.get_shape().end(),
-            static_cast<size_t>(1), std::multiplies<size_t>()
-        );
+        const size_t num_elements = a.get_shape().total_size();
 
         // 使用 BLAS 函数进行加法运算
         T alpha = 1.0;
@@ -55,10 +52,7 @@ namespace Breeze {
 
         auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
 
-        const size_t num_elements = std::accumulate(
-            a.get_shape().begin(), a.get_shape().end(),
-            static_cast<size_t>(1), std::multiplies<>()
-        );
+        const size_t num_elements = a.get_shape().total_size();
 
         T alpha = -1.0;
         if constexpr (std::is_same_v<T, float>) {
@@ -90,10 +84,7 @@ namespace Breeze {
 
         auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
 
-        const size_t num_elements = std::accumulate(
-            a.get_shape().begin(), a.get_shape().end(),
-            static_cast<size_t>(1), std::multiplies<>()
-        );
+        const size_t num_elements = a.get_shape().total_size();
 
         if constexpr (std::is_same_v<T, float>) {
             cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
@@ -125,8 +116,7 @@ namespace Breeze {
         }
 
         auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
-        const size_t num_elements = std::accumulate(a.get_shape().begin(), a.get_shape().end(),
-                                                    static_cast<size_t>(1), std::multiplies<size_t>());
+        const size_t num_elements = a.get_shape().total_size();
 
         const T* a_data = a.data();
         const T* b_data = b.data();
@@ -182,8 +172,8 @@ namespace Breeze {
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::matmul(const Tensor<T>& a, const Tensor<T>& b) const {
         // Get shapes of tensors a and b
-        const std::vector<size_t>& a_shape = a.get_shape();
-        const std::vector<size_t>& b_shape = b.get_shape();
+        const std::vector<size_t>& a_shape = a.get_shape().dims();
+        const std::vector<size_t>& b_shape = b.get_shape().dims();
 
         // Check for correct dimensions
         if (a_shape.size() < 2 || b_shape.size() < 2) {
@@ -198,8 +188,9 @@ namespace Breeze {
         std::vector<size_t> result_shape = a_shape;
         result_shape[result_shape.size() - 1] = b_shape[b_shape.size() - 1];
 
+
         // Allocate result tensor
-        auto result = std::make_shared<CPUTensor<T>>(result_shape);
+        auto result = std::make_shared<CPUTensor<T>>(Shape{result_shape});
 
         T alpha = static_cast<T>(1.0);
         T beta = static_cast<T>(0.0);
@@ -286,8 +277,8 @@ namespace Breeze {
 
     template<typename T>
     void CPUTensorOps<T>::broadcastTensors(Tensor<T>& a, Tensor<T>& b) {
-        const std::vector<size_t>& shape1 = a.get_shape();
-        const std::vector<size_t>& shape2 = b.get_shape();
+        const std::vector<size_t>& shape1 = a.get_shape().dims();
+        const std::vector<size_t>& shape2 = b.get_shape().dims();
 
         // 计算目标形状
         std::vector<size_t> targetShape;
@@ -327,8 +318,8 @@ namespace Breeze {
         }
 
         // 执行广播
-        auto result1 = std::make_shared<Blob<T>>(targetShape);
-        auto result2 = std::make_shared<Blob<T>>(targetShape);
+        auto b1 = std::make_shared<TensorStorage<T,CPUDevice>>(targetSize);
+        auto b2 = std::make_shared<TensorStorage<T,CPUDevice>>(targetSize);
         std::vector indices(maxDims, 0);
 
         const auto data_a = static_cast<const T*>(a.data());
@@ -340,8 +331,8 @@ namespace Breeze {
                 index1 += indices[j] * strides1[j];
                 index2 += indices[j] * strides2[j];
             }
-            result1->getData()[i] = data_a[index1];
-            result2->getData()[i] = data_b[index2];
+            b1->getData()[i] = data_a[index1];
+            b1->getData()[i] = data_b[index2];
 
             // 更新索引
             for (int j = maxDims - 1; j >= 0; --j) {
@@ -353,8 +344,8 @@ namespace Breeze {
                 indices[j] = 0;
             }
         }
-        a.setData(result1);
-        b.setData(result2);
+        static_cast<CPUTensor<T>&>(a).setTensorStorage(b1, Shape{targetShape});
+        static_cast<CPUTensor<T>&>(b).setTensorStorage(b2, Shape{targetShape});
 }
 
     // Explicit template instantiation

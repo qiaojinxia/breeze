@@ -1,40 +1,19 @@
-#ifndef CPUTENSOR_H
-#define CPUTENSOR_H
+#ifndef CPU_TENSOR_H
+#define CPU_TENSOR_H
 
 #include "Tensor.h"
-#include "Blob.h"
-#include <iostream>
-#include "CPUTensorOps.h"
+#include "TensorStorage.h"
 
 namespace Breeze {
+
     template<typename T>
-    class CPUTensor final : public Tensor<T> {
+    class CPUTensor final: public Tensor<T> {
     public:
-        explicit CPUTensor(const std::vector<size_t>& shape)
-            : Tensor<T>(shape, Device::CPU), blob(std::make_shared<Blob<T>>(shape)){
-            this->ops = std::make_shared<CPUTensorOps<T>>();
-        }
+        explicit CPUTensor(const Shape& _shape);
+        CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,size_t offset,
+            const std::vector<size_t>&& shape_size, const std::vector<size_t>&& strides);
 
-        T* data() override;
-
-        void setData(std::shared_ptr<Blob<T>> new_blob) override {
-            this->shape = new_blob->getShape();
-            blob = std::move(new_blob);
-        }
-
-        const T* data() const override;
-
-        [[nodiscard]] size_t size() const override;
-
-        void to_cpu() override;
-
-        void to_gpu() override;
-
-        void resize(std::vector<size_t> shape) override;
-
-        void print(std::ostream& os) const override;
-
-        void fill(T value) const override;
+        ~CPUTensor() override ;
 
         std::shared_ptr<Tensor<T>> operator+(const Tensor<T>& rhs) const override;
         std::shared_ptr<Tensor<T>> operator-(const Tensor<T>& rhs) const override;
@@ -43,12 +22,30 @@ namespace Breeze {
 
         std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
 
-        void broadcast(Tensor<T>& rhs)  override;
+        void broadcast(Tensor<T>& rhs) override;
 
-    protected:
-       std::shared_ptr<Blob<T>> blob;
+        void resize(const Shape& new_shape) override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> view(const Shape& new_shape) const override;
+
+
+        T* data() override;
+        const T* data() const override;
+
+        void to_cpu() override;
+        void to_gpu() override;
+
+        void print(std::ostream& os) const override;
+
+        void fill(T value) override;
+
+        void setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape);
+    private:
+        std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block;
+        size_t offset_ = 0;
+        std::vector<size_t> strides_ = {};
     };
 
-}
+} // namespace Breeze
 
-#endif //CPUTENSOR_H
+#endif // CPU_TENSOR_H

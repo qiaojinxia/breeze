@@ -30,17 +30,17 @@ int main() {
 
     Node::backward(w);
 
-    const CPUTensor<float> tensor1({3, 2, 7, 1});
+    CPUTensor<float> tensor1({3, 2, 7, 1});
     tensor1.fill(2.0);
 
-    const CPUTensor<float> tensor2({3, 2, 1, 7});
+    CPUTensor<float> tensor2({3, 2, 1, 7});
     tensor2.fill(3.0);
 
 
-    const CPUTensor<float> tensor3({2, 3, 4});
+    CPUTensor<float> tensor3({2, 3, 4});
     tensor3.fill(4.0);
 
-    const CPUTensor<float> tensor4({2, 3, 4});
+    CPUTensor<float> tensor4({2, 3, 4});
     tensor4.fill(2.0);
 
 
@@ -56,10 +56,10 @@ int main() {
     std::cout << *r3 << std::endl;
 
 
-    CPUTensor<float> tensor5({1, 3, 4});
+    CPUTensor<float> tensor5(Shape{1, 4});
     tensor5.fill(4.0);
 
-    CPUTensor<float> tensor6({2, 1, 4});
+    CPUTensor<float> tensor6(Shape{2, 1, 4});
     tensor6.fill(2.0);
 
 

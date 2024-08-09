@@ -1,77 +1,86 @@
-#ifndef MATRIX_H
-#define MATRIX_H
+#ifndef TENSOR_H
+#define TENSOR_H
 
-#include <vector>
 #include <iostream>
+#include "TensorStorage.h"
 #include "TensorOps.h"
 
 namespace Breeze {
-    // 前向声明
+
+enum class Device {
+    CPU,
+    GPU
+};
+
+template<typename T>
+class Tensor {
+protected:
+    Device device;
+    Shape shape;
+    TensorOps<T> *ops;
+
+public:
+    Tensor(Shape _shape, Device _device,TensorOps<T>* _tensor_op);
+    virtual ~Tensor() = default;
+
+    virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
+    virtual std::shared_ptr<Tensor> operator-(const Tensor& rhs) const = 0;
+    virtual std::shared_ptr<Tensor> operator*(const Tensor& rhs) const = 0;
+    virtual std::shared_ptr<Tensor> operator/(const Tensor& rhs) const = 0;
+
+    virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
+
+    virtual void broadcast(Tensor& rhs) = 0;
+
+    virtual void resize(const Shape& new_shape) = 0;
+    virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const = 0;
+    virtual std::shared_ptr<Tensor> view(const Shape& new_shape) const = 0;
+
+    virtual T* data() = 0;
+    virtual const T* data() const = 0;
+
+    [[nodiscard]] virtual size_t size() const;
+    virtual void to_cpu() = 0;
+    virtual void to_gpu() = 0;
+    virtual void print(std::ostream& os) const = 0;
+
+    virtual void fill(T value) = 0;
+
+    [[nodiscard]] const Shape& get_shape() const;
+    [[nodiscard]] Device get_device() const;
+
+    [[nodiscard]] size_t num_elements() const;
+
+    friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
+        tensor.print(os);
+        return os;
+    }
+};
+
     template<typename T>
-    class Blob;
+    Tensor<T>::Tensor(Shape _shape,const  Device _device, TensorOps<T> *_tensor_op)
+        :device(_device), shape(std::move(_shape)), ops(_tensor_op) {}
 
-    // 设备枚举
-    enum class Device {
-        CPU,
-        GPU
-    };
-
-    // 张量类
     template<typename T>
-    class Tensor {
-    protected:
-        std::vector<size_t> shape;
-        Device device;
-        std::shared_ptr<TensorOps<T>> ops;
-    public:
-        virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
-        virtual std::shared_ptr<Tensor> operator-(const Tensor& rhs) const = 0;
-        virtual std::shared_ptr<Tensor> operator*(const Tensor& rhs) const = 0;
-        virtual std::shared_ptr<Tensor> operator/(const Tensor& rhs) const = 0;
+    size_t Tensor<T>::size() const {
+        return shape.total_size();
+    }
 
-        virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
+    template<typename T>
+    const Shape& Tensor<T>::get_shape() const {
+        return shape;
+    }
 
-        virtual void broadcast(Tensor& rhs) = 0;
+    template<typename T>
+    Device Tensor<T>::get_device() const {
+        return device;
+    }
 
-        Tensor(const std::vector<size_t>& shape, const Device device)
-            : shape(shape), device(device) {
-        }
+    template<typename T>
+    size_t Tensor<T>::num_elements() const {
+        return shape.total_size();
+    }
 
-        virtual ~Tensor() = default;
+} // namespace Breeze
 
-        virtual void resize(std::vector<size_t>) = 0;
-
-        // 纯虚函数
-        virtual T* data() = 0;
-        virtual const T* data() const = 0;
-        virtual void setData(std::shared_ptr<Blob<T>> new_blob) = 0;
-
-        [[nodiscard]] virtual size_t size() const = 0;
-        virtual void to_cpu() = 0;
-        virtual void to_gpu() = 0;
-        virtual void print(std::ostream& os) const = 0;
-
-        virtual void fill(T value) const = 0;
-
-        // 共用函数
-        [[nodiscard]] const std::vector<size_t>& get_shape() const { return shape; }
-        [[nodiscard]] Device get_device() const { return device; }
-
-        // 辅助函数
-        [[nodiscard]] size_t num_elements() const {
-            size_t total = 1;
-            for (const size_t dim : shape) {
-                total *= dim;
-            }
-            return total;
-        }
-
-        // 友元函数：重载输出运算符
-        friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
-            tensor.print(os);
-            return os;
-        }
-    };
-}
-
-#endif //MATRIX_H
+#endif // TENSOR_H

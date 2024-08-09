@@ -6,7 +6,6 @@
 #define CPUTENSOROPS_H
 #include <vector>
 #include "TensorOps.h"
-#include "Blob.h"
 
 namespace Breeze {
     template<typename T>

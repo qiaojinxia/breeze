@@ -19,14 +19,14 @@ add_executable(breeze src/main.cpp
         src/node.cpp
         src/node.h
         src/loss_functions.h
-        src/Blob.cpp
-        src/Blob.h
         src/Tensor.h
         src/TensorOps.h
         src/CPUTensorOps.cpp
         src/CPUTensorOps.h
         src/CPUTensor.cpp
-        src/CPUTensor.h)
+        src/CPUTensor.h
+        src/TensorStorage.h
+)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DACCELERATE_NEW_LAPACK")
 # 链接 Armadillo 库
