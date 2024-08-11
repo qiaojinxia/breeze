@@ -33,17 +33,20 @@ public:
     virtual void broadcast(Tensor& rhs) = 0;
 
     virtual void resize(const Shape& new_shape) = 0;
-    virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const = 0;
-    virtual std::shared_ptr<Tensor> view(const Shape& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int64_t, int64_t, int64_t>>& ranges) const  = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> view(std::vector<size_t>&& new_shape) const = 0;
+    virtual void expand(const Shape&& new_shape) = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
+    [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
 
     [[nodiscard]] virtual size_t size() const;
     virtual void to_cpu() = 0;
     virtual void to_gpu() = 0;
     virtual void print(std::ostream& os) const = 0;
-
+    [[nodiscard]] virtual bool is_contiguous() const = 0;
     virtual void fill(T value) = 0;
 
     [[nodiscard]] const Shape& get_shape() const;

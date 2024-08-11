@@ -2,15 +2,7 @@
 #include <armadillo>
 #include "node.h"
 #include "CPUTensor.h"
-#include <chrono>
-// 定义宏来测量代码段的运行时间
-#define MEASURE_TIME(code_to_measure) do { \
-auto start = std::chrono::high_resolution_clock::now(); \
-code_to_measure; \
-auto end = std::chrono::high_resolution_clock::now(); \
-std::chrono::duration<double, std::milli> elapsed = end - start; \
-std::cout << "Elapsed time: " << elapsed.count() << " ms" << std::endl; \
-} while (0)
+#include "common/Macro.h"
 
 using namespace Breeze;
 int main() {
@@ -37,10 +29,10 @@ int main() {
     tensor2.fill(3.0);
 
 
-    CPUTensor<float> tensor3({2, 3, 4});
+    CPUTensor<float> tensor3({2, 3, 8});
     tensor3.fill(4.0);
 
-    CPUTensor<float> tensor4({2, 3, 4});
+    CPUTensor<float> tensor4({2, 3, 8});
     tensor4.fill(2.0);
 
 
@@ -53,21 +45,26 @@ int main() {
 
 
     const auto r3 = tensor3 * tensor4;
-    std::cout << *r3 << std::endl;
+    auto rs = r3->slice({KEEP, KEEP, {0, 9, 2 }});
+    std::cout << *rs << std::endl;
+    auto rs1 = rs->slice({KEEP, KEEP, {0, 9, 2 }});
+    std::cout << *rs1 << std::endl;
 
 
-    CPUTensor<float> tensor5(Shape{1, 4});
+    CPUTensor<float> tensor5(Shape{1, 1});
     tensor5.fill(4.0);
 
     CPUTensor<float> tensor6(Shape{2, 1, 4});
     tensor6.fill(2.0);
 
-
     tensor5.broadcast(tensor6);
 
-    auto t1 = tensor5 + tensor6;
+    // auto t1 = tensor5 + tensor6;
 
-    std::cout << *t1 << std::endl;
+    CPUTensor<float> tensor7(Shape{1, 4});
+    tensor7.fill(1.0);
+    tensor7.expand({3,4});
+    std::cout << tensor7 << std::endl;
 
     // MEASURE_TIME(const auto r1 = tensor3 * tensor4; );
     // MEASURE_TIME(const auto r2 = tensor3 + tensor4; );

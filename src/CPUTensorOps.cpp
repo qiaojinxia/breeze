@@ -29,7 +29,6 @@ namespace Breeze {
             cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
             cblas_daxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
         } else {
-            // 对于非浮点类型，使用标准 C++ 循环
             const T* a_data = a.data();
             const T* b_data = b.data();
             T* result_data = result->data();

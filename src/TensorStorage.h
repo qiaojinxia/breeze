@@ -123,8 +123,9 @@ namespace Breeze {
         }
 
         [[nodiscard]] Shape reshape(const std::vector<size_t>& new_dims) const {
-            const size_t new_total_size = std::accumulate(new_dims.begin(), new_dims.end(), 1ULL, std::multiplies<>());
-            if (new_total_size != total_size()) {
+            if (const size_t new_total_size =
+                std::accumulate(new_dims.begin(), new_dims.end(), 1ULL, std::multiplies<>());
+                new_total_size != total_size()) {
                 throw std::invalid_argument("New shape must have the same total size");
             }
             return Shape(new_dims);

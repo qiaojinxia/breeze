@@ -26,6 +26,8 @@ add_executable(breeze src/main.cpp
         src/CPUTensor.cpp
         src/CPUTensor.h
         src/TensorStorage.h
+        src/common/Const.h
+        src/common/Macro.h
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DACCELERATE_NEW_LAPACK")
