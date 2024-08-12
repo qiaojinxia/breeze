@@ -330,9 +330,9 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<T>>(Shape{result_shape});
 
         // Compute the strides for each tensor
-        const std::vector<size_t> a_strides = compute_strides(a_shape);
-        const std::vector<size_t> b_strides = compute_strides(b_shape);
-        const std::vector<size_t> result_strides = compute_strides(result_shape);
+        const std::vector<size_t> a_strides = a.get_strides();
+        const std::vector<size_t> b_strides = b.get_strides();
+        const std::vector<size_t> result_strides = result->get_strides();
 
         const size_t depth = a_shape.size() - 2;
         size_t m = a_shape[depth];

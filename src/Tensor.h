@@ -51,6 +51,7 @@ public:
 
     [[nodiscard]] const Shape& get_shape() const;
     [[nodiscard]] Device get_device() const;
+    [[nodiscard]] virtual std::vector<size_t> get_strides() const = 0;
 
     [[nodiscard]] virtual std::vector<int64_t> get_steps() const = 0;
     [[nodiscard]] size_t num_elements() const;
