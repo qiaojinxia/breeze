@@ -45,9 +45,11 @@ namespace Breeze {
 
         void fill(T value) override;
 
+        [[nodiscard]] std::vector<int64_t> get_steps() const override;
+
         void setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape);
 
-        [[nodiscard]] std::vector<size_t> getStrides() const;
+        [[nodiscard]] std::vector<size_t> get_strides() const;
 
     private:
         std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block;

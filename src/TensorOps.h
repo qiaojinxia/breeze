@@ -20,7 +20,8 @@ namespace Breeze {
         virtual std::shared_ptr<Tensor<T>> divide(const Tensor<T>& a, const Tensor<T>& b) const = 0 ;
         virtual std::shared_ptr<Tensor<T>> multiply(const Tensor<T>& a, const Tensor<T>& b) const = 0;
 
-        virtual void broadcastTensors(Tensor<T>& a, Tensor<T>& b) = 0;
+        virtual  std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
+            broadcastTensors(const Tensor<T>& a,const Tensor<T>& b) const = 0;
 
 
         virtual ~TensorOps() = default;

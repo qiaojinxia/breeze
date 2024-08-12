@@ -3,38 +3,58 @@
 #include "CPUTensorOps.h"
 #include "CPUTensor.h"
 #include <cblas.h>
-#include <numeric>
 #include <immintrin.h>
 
 namespace Breeze {
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::add(const Tensor<T>& a, const Tensor<T>& b) const {
-        // 验证两个张量的维度是否兼容
-        if (a.get_shape() != b.get_shape()) {
-            throw std::invalid_argument("Tensor shapes must be equal for addition.");
+        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+
+        auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
+
+        size_t outer_dim = 1;
+        for (size_t i = 0; i < target_shape.size() - 1; ++i) {
+            outer_dim *= target_shape[i];
         }
 
-        // 创建一个新的张量来存储结果，形状与输入张量相同
-        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
+        const T* a_data = a.data();
+        const T* b_data = b.data();
+        T* result_data = result->data();
+        const auto& a_steps = a.get_steps();
+        const auto& b_steps = b.get_steps();
 
-        // 使用 std::accumulate 计算总元素数
-        const size_t num_elements = a.get_shape().total_size();
+        const size_t inner_dim = target_shape.back();
 
-        // 使用 BLAS 函数进行加法运算
-        T alpha = 1.0;
-        if constexpr (std::is_same_v<T, float>) {
-            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_saxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
-        } else if constexpr (std::is_same_v<T, double>) {
-            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_daxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
-        } else {
-            const T* a_data = a.data();
-            const T* b_data = b.data();
-            T* result_data = result->data();
 #pragma omp parallel for
-            for (size_t i = 0; i < num_elements; ++i) {
-                result_data[i] = a_data[i] + b_data[i];
+        for (size_t i = 0; i < outer_dim; ++i) {
+            std::vector<size_t> coords(target_shape.size() - 1);
+            size_t temp = i;
+            for (int k = static_cast<int>(target_shape.size()) - 2; k >= 0; --k) {
+                coords[k] = temp % target_shape[k];
+                temp /= target_shape[k];
+            }
+
+            size_t a_offset = 0, b_offset = 0, result_offset = 0;
+            for (size_t k = 0; k < coords.size(); ++k) {
+                a_offset += coords[k] * a_strides[k] * a_steps[k];
+                b_offset += coords[k] * b_strides[k] * b_steps[k];
+                result_offset += coords[k] * result->get_strides()[k];
+            }
+
+            int a_inc = a_strides.back() * a_steps.back();
+            int b_inc = b_strides.back() * b_steps.back();
+
+            if constexpr (std::is_same_v<T, float>) {
+                cblas_scopy(inner_dim, a_data + a_offset, a_inc, result_data + result_offset, 1);
+                cblas_saxpy(inner_dim, 1.0f, b_data + b_offset, b_inc, result_data + result_offset, 1);
+            } else if constexpr (std::is_same_v<T, double>) {
+                cblas_dcopy(inner_dim, a_data + a_offset, a_inc, result_data + result_offset, 1);
+                cblas_daxpy(inner_dim, 1.0, b_data + b_offset, b_inc, result_data + result_offset, 1);
+            } else {
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    result_data[result_offset + j * 1] =
+                        a_data[a_offset + j * a_inc] + b_data[b_offset + j * b_inc];
+                }
             }
         }
 
@@ -45,128 +65,247 @@ namespace Breeze {
     // 减法实现
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::subtract(const Tensor<T>& a, const Tensor<T>& b) const {
-        if (a.get_shape() != b.get_shape()) {
-            throw std::invalid_argument("Tensor shapes must be equal for subtraction.");
+        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+        auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
+
+        size_t outer_dim = 1;
+        for (size_t i = 0; i < target_shape.size() - 1; ++i) {
+            outer_dim *= target_shape[i];
         }
-
-        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
-
-        const size_t num_elements = a.get_shape().total_size();
-
-        T alpha = -1.0;
-        if constexpr (std::is_same_v<T, float>) {
-            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_saxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
-        } else if constexpr (std::is_same_v<T, double>) {
-            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_daxpy(num_elements, alpha, b.data(), 1, result->data(), 1);
-        } else {
-            const T* a_data = a.data();
-            const T* b_data = b.data();
-            T* result_data = result->data();
-#pragma omp parallel for
-            for (size_t i = 0; i < num_elements; ++i) {
-                result_data[i] = a_data[i] - b_data[i];
-            }
-        }
-
-        return result;
-    }
-
-
-    // 乘法实现（元素wise乘法，不是矩阵乘法）
-    template<typename T>
-    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::multiply(const Tensor<T>& a, const Tensor<T>& b) const {
-        if (a.get_shape() != b.get_shape()) {
-            throw std::invalid_argument("Tensor shapes must be equal for element-wise multiplication.");
-        }
-
-        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
-
-        const size_t num_elements = a.get_shape().total_size();
-
-        if constexpr (std::is_same_v<T, float>) {
-            cblas_scopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_stbmv(CblasRowMajor, CblasUpper, CblasNoTrans, CblasNonUnit,
-                        num_elements, 0, b.data(), 1, result->data(), 1);
-        } else if constexpr (std::is_same_v<T, double>) {
-            cblas_dcopy(num_elements, a.data(), 1, result->data(), 1);
-            cblas_dtbmv(CblasRowMajor, CblasUpper, CblasNoTrans, CblasNonUnit,
-                        num_elements, 0, b.data(), 1, result->data(), 1);
-        } else {
-            const T* a_data = a.data();
-            const T* b_data = b.data();
-            T* result_data = result->data();
-#pragma omp parallel for
-            for (size_t i = 0; i < num_elements; ++i) {
-                result_data[i] = a_data[i] * b_data[i];
-            }
-        }
-
-        return result;
-    }
-
-
-    // 除法实现（元素wise除法）
-    template<typename T>
-    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::divide(const Tensor<T>& a, const Tensor<T>& b) const {
-        if (a.get_shape() != b.get_shape()) {
-            throw std::invalid_argument("Tensor shapes must be equal for element-wise division.");
-        }
-
-        auto result = std::make_shared<CPUTensor<T>>(a.get_shape());
-        const size_t num_elements = a.get_shape().total_size();
 
         const T* a_data = a.data();
         const T* b_data = b.data();
         T* result_data = result->data();
+        const auto& a_steps = a.get_steps();
+        const auto& b_steps = b.get_steps();
 
-        if constexpr (std::is_same_v<T, float>) {
+        const size_t inner_dim = target_shape.back();
+
 #pragma omp parallel for
-            size_t i = 0;
-            for (; i + 8 <= num_elements; i += 8) {
-                const __m256 a_vec = _mm256_loadu_ps(a_data + i);
-                const __m256 b_vec = _mm256_loadu_ps(b_data + i);
-                if (_mm256_movemask_ps(_mm256_cmp_ps(b_vec, _mm256_setzero_ps(), _CMP_EQ_OQ)) != 0) {
-                    throw std::runtime_error("Division by zero encountered.");
-                }
-                __m256 result_vec = _mm256_div_ps(a_vec, b_vec);
-                _mm256_storeu_ps(result_data + i, result_vec);
-            }
-            // 处理剩余的元素
-            for (; i < num_elements; ++i) {
-                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
-                result_data[i] = a_data[i] / b_data[i];
-            }
-        } else if constexpr (std::is_same_v<T, double>) {
-#pragma omp parallel for
-            size_t i = 0;
-            for (; i + 4 <= num_elements; i += 4) {
-                const __m256d a_vec = _mm256_loadu_pd(a_data + i); // 如果数据对齐，可以使用 _mm256_load_pd
-                const __m256d b_vec = _mm256_loadu_pd(b_data + i);
-                if (_mm256_movemask_pd(_mm256_cmp_pd(b_vec, _mm256_setzero_pd(), _CMP_EQ_OQ)) != 0) {
-                    throw std::runtime_error("Division by zero encountered.");
-                }
-                const __m256d result_vec = _mm256_div_pd(a_vec, b_vec);
-                _mm256_storeu_pd(result_data + i, result_vec);
+        for (size_t i = 0; i < outer_dim; ++i) {
+            std::vector<size_t> coords(target_shape.size() - 1);
+            size_t temp = i;
+            for (int k = static_cast<int>(target_shape.size()) - 2; k >= 0; --k) {
+                coords[k] = temp % target_shape[k];
+                temp /= target_shape[k];
             }
 
-            // 处理剩余的元素
-            for (; i < num_elements; ++i) {
-                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
-                result_data[i] = a_data[i] * (1.0 / b_data[i]);
+            size_t a_offset = 0, b_offset = 0, result_offset = 0;
+            for (size_t k = 0; k < coords.size(); ++k) {
+                a_offset += coords[k] * a_strides[k] * a_steps[k];
+                b_offset += coords[k] * b_strides[k] * b_steps[k];
+                result_offset += coords[k] * result->get_strides()[k];
             }
-        } else {
+
+            int a_inc = a_strides.back() * a_steps.back();
+            int b_inc = b_strides.back() * b_steps.back();
+
+            if constexpr (std::is_same_v<T, float>) {
+                cblas_scopy(inner_dim, a_data + a_offset, a_inc, result_data + result_offset, 1);
+                cblas_saxpy(inner_dim, -1.0f, b_data + b_offset, b_inc, result_data + result_offset, 1);
+            } else if constexpr (std::is_same_v<T, double>) {
+                cblas_dcopy(inner_dim, a_data + a_offset, a_inc, result_data + result_offset, 1);
+                cblas_daxpy(inner_dim, -1.0, b_data + b_offset, b_inc, result_data + result_offset, 1);
+            } else {
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    result_data[result_offset + j] =
+                        a_data[a_offset + j * a_inc] - b_data[b_offset + j * b_inc];
+                }
+            }
+        }
+
+        return result;
+}
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::multiply(const Tensor<T>& a, const Tensor<T>& b) const {
+        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+
+        auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
+
+        size_t outer_dim = 1;
+        for (size_t i = 0; i < target_shape.size() - 1; ++i) {
+            outer_dim *= target_shape[i];
+        }
+
+        const T* a_data = a.data();
+        const T* b_data = b.data();
+        T* result_data = result->data();
+        const auto& a_steps = a.get_steps();
+        const auto& b_steps = b.get_steps();
+
+        const size_t inner_dim = target_shape.back();
+
 #pragma omp parallel for
-            for (size_t i = 0; i < num_elements; ++i) {
-                if (b_data[i] == 0) throw std::runtime_error("Division by zero encountered.");
-                result_data[i] = a_data[i] / b_data[i];
+        for (size_t i = 0; i < outer_dim; ++i) {
+            std::vector<size_t> coords(target_shape.size() - 1);
+            size_t temp = i;
+            for (int k = static_cast<int>(target_shape.size()) - 2; k >= 0; --k) {
+                coords[k] = temp % target_shape[k];
+                temp /= target_shape[k];
+            }
+
+            size_t a_offset = 0, b_offset = 0, result_offset = 0;
+            for (size_t k = 0; k < coords.size(); ++k) {
+                a_offset += coords[k] * a_strides[k] * a_steps[k];
+                b_offset += coords[k] * b_strides[k] * b_steps[k];
+                result_offset += coords[k] * result->get_strides()[k];
+            }
+
+            const int a_inc = a_strides.back() * a_steps.back();
+            const int b_inc = b_strides.back() * b_steps.back();
+
+            if constexpr (std::is_same_v<T, float>) {
+                for (size_t j = 0; j < inner_dim; j += 8) {
+                    const __m256 a_vec = _mm256_setr_ps(
+                        j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 1,
+                        j + 1 < inner_dim ? a_data[a_offset + (j + 1) * a_inc] : 1,
+                        j + 2 < inner_dim ? a_data[a_offset + (j + 2) * a_inc] : 1,
+                        j + 3 < inner_dim ? a_data[a_offset + (j + 3) * a_inc] : 1,
+                        j + 4 < inner_dim ? a_data[a_offset + (j + 4) * a_inc] : 1,
+                        j + 5 < inner_dim ? a_data[a_offset + (j + 5) * a_inc] : 1,
+                        j + 6 < inner_dim ? a_data[a_offset + (j + 6) * a_inc] : 1,
+                        j + 7 < inner_dim ? a_data[a_offset + (j + 7) * a_inc] : 1
+                    );
+                    const __m256 b_vec = _mm256_setr_ps(
+                        j + 0 < inner_dim ? b_data[b_offset + (j + 0) * b_inc] : 1,
+                        j + 1 < inner_dim ? b_data[b_offset + (j + 1) * b_inc] : 1,
+                        j + 2 < inner_dim ? b_data[b_offset + (j + 2) * b_inc] : 1,
+                        j + 3 < inner_dim ? b_data[b_offset + (j + 3) * b_inc] : 1,
+                        j + 4 < inner_dim ? b_data[b_offset + (j + 4) * b_inc] : 1,
+                        j + 5 < inner_dim ? b_data[b_offset + (j + 5) * b_inc] : 1,
+                        j + 6 < inner_dim ? b_data[b_offset + (j + 6) * b_inc] : 1,
+                        j + 7 < inner_dim ? b_data[b_offset + (j + 7) * b_inc] : 1
+                    );
+                    __m256 result_vec = _mm256_mul_ps(a_vec, b_vec);
+                    _mm256_storeu_ps(result_data + result_offset + j, result_vec);
+                }
+            } else if constexpr (std::is_same_v<T, double>) {
+                for (size_t j = 0; j < inner_dim; j += 4) {
+                    const __m256d a_vec = _mm256_setr_pd(
+                        j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 1,
+                        j + 1 < inner_dim ? a_data[a_offset + (j + 1) * a_inc] : 1,
+                        j + 2 < inner_dim ? a_data[a_offset + (j + 2) * a_inc] : 1,
+                        j + 3 < inner_dim ? a_data[a_offset + (j + 3) * a_inc] : 1
+                    );
+                    const __m256d b_vec = _mm256_setr_pd(
+                        j + 0 < inner_dim ? b_data[b_offset + (j + 0) * b_inc] : 1,
+                        j + 1 < inner_dim ? b_data[b_offset + (j + 1) * b_inc] : 1,
+                        j + 2 < inner_dim ? b_data[b_offset + (j + 2) * b_inc] : 1,
+                        j + 3 < inner_dim ? b_data[b_offset + (j + 3) * b_inc] : 1
+                    );
+                    __m256d result_vec = _mm256_mul_pd(a_vec, b_vec);
+                    _mm256_storeu_pd(result_data + result_offset + j, result_vec);
+                }
+            } else {
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    result_data[result_offset + j] =
+                        a_data[a_offset + j * a_inc] * b_data[b_offset + j * b_inc];
+                }
             }
         }
 
         return result;
     }
 
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensorOps<T>::divide(const Tensor<T>& a, const Tensor<T>& b) const {
+        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+
+        auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
+
+        size_t outer_dim = 1;
+        for (size_t i = 0; i < target_shape.size() - 1; ++i) {
+            outer_dim *= target_shape[i];
+        }
+
+        const T* a_data = a.data();
+        const T* b_data = b.data();
+        T* result_data = result->data();
+        const auto& a_steps = a.get_steps();
+        const auto& b_steps = b.get_steps();
+
+        const size_t inner_dim = target_shape.back();
+
+#pragma omp parallel for
+        for (size_t i = 0; i < outer_dim; ++i) {
+            std::vector<size_t> coords(target_shape.size() - 1);
+            size_t temp = i;
+            for (int k = static_cast<int>(target_shape.size()) - 2; k >= 0; --k) {
+                coords[k] = temp % target_shape[k];
+                temp /= target_shape[k];
+            }
+
+            size_t a_offset = 0, b_offset = 0, result_offset = 0;
+            for (size_t k = 0; k < coords.size(); ++k) {
+                a_offset += coords[k] * a_strides[k] * a_steps[k];
+                b_offset += coords[k] * b_strides[k] * b_steps[k];
+                result_offset += coords[k] * result->get_strides()[k];
+            }
+
+            const int a_inc = a_strides.back() * a_steps.back();
+            const int b_inc = b_strides.back() * b_steps.back();
+
+            if constexpr (std::is_same_v<T, float>) {
+                for (size_t j = 0; j < inner_dim; j += 8) {
+                    const __m256 a_vec = _mm256_setr_ps(
+                        j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 0,
+                        j + 1 < inner_dim ? a_data[a_offset + (j + 1) * a_inc] : 0,
+                        j + 2 < inner_dim ? a_data[a_offset + (j + 2) * a_inc] : 0,
+                        j + 3 < inner_dim ? a_data[a_offset + (j + 3) * a_inc] : 0,
+                        j + 4 < inner_dim ? a_data[a_offset + (j + 4) * a_inc] : 0,
+                        j + 5 < inner_dim ? a_data[a_offset + (j + 5) * a_inc] : 0,
+                        j + 6 < inner_dim ? a_data[a_offset + (j + 6) * a_inc] : 0,
+                        j + 7 < inner_dim ? a_data[a_offset + (j + 7) * a_inc] : 0
+                    );
+                    const __m256 b_vec = _mm256_setr_ps(
+                        j + 0 < inner_dim ? b_data[b_offset + (j + 0) * b_inc] : 1,
+                        j + 1 < inner_dim ? b_data[b_offset + (j + 1) * b_inc] : 1,
+                        j + 2 < inner_dim ? b_data[b_offset + (j + 2) * b_inc] : 1,
+                        j + 3 < inner_dim ? b_data[b_offset + (j + 3) * b_inc] : 1,
+                        j + 4 < inner_dim ? b_data[b_offset + (j + 4) * b_inc] : 1,
+                        j + 5 < inner_dim ? b_data[b_offset + (j + 5) * b_inc] : 1,
+                        j + 6 < inner_dim ? b_data[b_offset + (j + 6) * b_inc] : 1,
+                        j + 7 < inner_dim ? b_data[b_offset + (j + 7) * b_inc] : 1
+                    );
+                    if (_mm256_movemask_ps(_mm256_cmp_ps(b_vec, _mm256_setzero_ps(), _CMP_EQ_OQ)) != 0) {
+                        throw std::runtime_error("Division by zero encountered.");
+                    }
+                    __m256 result_vec = _mm256_div_ps(a_vec, b_vec);
+                    _mm256_storeu_ps(result_data + result_offset + j, result_vec);
+                }
+            } else if constexpr (std::is_same_v<T, double>) {
+                for (size_t j = 0; j < inner_dim; j += 4) {
+                    const __m256d a_vec = _mm256_setr_pd(
+                        j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 0,
+                        j + 1 < inner_dim ? a_data[a_offset + (j + 1) * a_inc] : 0,
+                        j + 2 < inner_dim ? a_data[a_offset + (j + 2) * a_inc] : 0,
+                        j + 3 < inner_dim ? a_data[a_offset + (j + 3) * a_inc] : 0
+                    );
+                    const __m256d b_vec = _mm256_setr_pd(
+                        j + 0 < inner_dim ? b_data[b_offset + (j + 0) * b_inc] : 1,
+                        j + 1 < inner_dim ? b_data[b_offset + (j + 1) * b_inc] : 1,
+                        j + 2 < inner_dim ? b_data[b_offset + (j + 2) * b_inc] : 1,
+                        j + 3 < inner_dim ? b_data[b_offset + (j + 3) * b_inc] : 1
+                    );
+                    if (_mm256_movemask_pd(_mm256_cmp_pd(b_vec, _mm256_setzero_pd(), _CMP_EQ_OQ)) != 0) {
+                        throw std::runtime_error("Division by zero encountered.");
+                    }
+                    __m256d result_vec = _mm256_div_pd(a_vec, b_vec);
+                    _mm256_storeu_pd(result_data + result_offset + j, result_vec);
+                }
+            } else {
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    T b_val = b_data[b_offset + j * b_inc];
+                    if (b_val == 0) throw std::runtime_error("Division by zero encountered.");
+                    result_data[result_offset + j] = a_data[a_offset + j * a_inc] / b_val;
+                }
+            }
+        }
+
+    return result;
+}
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::matmul(const Tensor<T>& a, const Tensor<T>& b) const {
@@ -187,30 +326,14 @@ namespace Breeze {
         std::vector<size_t> result_shape = a_shape;
         result_shape[result_shape.size() - 1] = b_shape[b_shape.size() - 1];
 
-
         // Allocate result tensor
         auto result = std::make_shared<CPUTensor<T>>(Shape{result_shape});
-
-        T alpha = static_cast<T>(1.0);
-        T beta = static_cast<T>(0.0);
 
         // Compute the strides for each tensor
         const std::vector<size_t> a_strides = compute_strides(a_shape);
         const std::vector<size_t> b_strides = compute_strides(b_shape);
         const std::vector<size_t> result_strides = compute_strides(result_shape);
 
-        // Call the recursive matrix multiplication
-        multiply_non_recursive(a.data(), b.data(), result->data(), a_shape, b_shape, a_strides, b_strides, result_strides);
-
-        return result;
-    }
-
-
-    template<typename T>
-    void CPUTensorOps<T>::multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,
-                                                 const std::vector<size_t>& b_shape,
-                                                 const std::vector<size_t>& a_strides, const std::vector<size_t>& b_strides,
-                                                 const std::vector<size_t>& result_strides) const {
         const size_t depth = a_shape.size() - 2;
         size_t m = a_shape[depth];
         size_t k = a_shape[depth + 1];
@@ -228,34 +351,63 @@ namespace Breeze {
             num_matrices *= a_shape[i];
         }
 
+        const T* a_data = a.data();
+        const T* b_data = b.data();
+        T* result_data = result->data();
+        const auto& a_steps = a.get_steps();
+        const auto& b_steps = b.get_steps();
+
         // Parallelize using OpenMP
 #pragma omp parallel for
         for (size_t idx = 0; idx < num_matrices; ++idx) {
-            size_t a_offset = 0;
-            size_t b_offset = 0;
-            size_t result_offset = 0;
-            size_t temp_idx = idx;
-
-            // Calculate the offsets for each matrix slice
-            for (size_t i = 0; i < depth; ++i) {
-                const size_t index = temp_idx % a_shape[i];
-                a_offset += index * a_strides[i];
-                b_offset += index * b_strides[i];
-                result_offset += index * result_strides[i];
-                temp_idx /= a_shape[i];
+            std::vector<size_t> coords(depth);
+            size_t temp = idx;
+            for (int i = static_cast<int>(depth) - 1; i >= 0; --i) {
+                coords[i] = temp % a_shape[i];
+                temp /= a_shape[i];
             }
 
-            const T* a_sub = a + a_offset;
-            const T* b_sub = b + b_offset;
-            T* result_sub = result + result_offset;
+            size_t a_offset = 0, b_offset = 0, result_offset = 0;
+            for (size_t i = 0; i < depth; ++i) {
+                a_offset += coords[i] * a_strides[i] * a_steps[i];
+                b_offset += coords[i] * b_strides[i] * b_steps[i];
+                result_offset += coords[i] * result_strides[i];
+            }
+
+            const T* a_sub = a_data + a_offset;
+            const T* b_sub = b_data + b_offset;
+            T* result_sub = result_data + result_offset;
 
             // Use BLAS for matrix multiplication
             if constexpr (std::is_same_v<T, float>) {
                 cblas_sgemm(order, transA, transB, m, n, k, alpha, a_sub, k, b_sub, n, beta, result_sub, n);
             } else if constexpr (std::is_same_v<T, double>) {
                 cblas_dgemm(order, transA, transB, m, n, k, alpha, a_sub, k, b_sub, n, beta, result_sub, n);
+            } else {
+                // Fallback for other types using vectorized operations
+                for (size_t i = 0; i < m; ++i) {
+                    for (size_t j = 0; j < n; j += 4) {
+                        __m128 sum = _mm_setzero_ps();
+                        for (size_t l = 0; l < k; ++l) {
+                            const __m128 a_val = _mm_set1_ps(a_sub[i * k + l]);
+                            const __m128 b_val = _mm_loadu_ps(&b_sub[l * n + j]);
+                            sum = _mm_add_ps(sum, _mm_mul_ps(a_val, b_val));
+                        }
+                        _mm_storeu_ps(&result_sub[i * n + j], sum);
+                    }
+                    // Handle remaining elements
+                    for (size_t j = n - (n % 4); j < n; ++j) {
+                        T sum = 0;
+                        for (size_t l = 0; l < k; ++l) {
+                            sum += a_sub[i * k + l] * b_sub[l * n + j];
+                        }
+                        result_sub[i * n + j] = sum;
+                    }
+                }
             }
         }
+
+        return result;
 }
 
     template<typename T>
@@ -275,7 +427,8 @@ namespace Breeze {
 }
 
     template<typename T>
-    void CPUTensorOps<T>::broadcastTensors(Tensor<T>& a, Tensor<T>& b) {
+    std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
+        CPUTensorOps<T>::broadcastTensors(const Tensor<T>& a, const Tensor<T>& b) const{
         const std::vector<size_t>& shape1 = a.get_shape().dims();
         const std::vector<size_t>& shape2 = b.get_shape().dims();
 
@@ -285,67 +438,28 @@ namespace Breeze {
         targetShape.resize(maxDims);
 
         for (int i = 0; i < maxDims; ++i) {
-            //如果在当前没有维度 就认为是 1
             const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
             const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
             if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
                 throw std::runtime_error("Incompatible shapes for broadcasting");
             }
-            targetShape[maxDims - 1 - i] = std::max(static_cast<int>(dim1), static_cast<int>(dim2));
-        }
-
-        // 计算目标大小和步长
-        const size_t targetSize = std::accumulate(targetShape.begin(), targetShape.end(), 1, std::multiplies<>());
-        std::vector<int> targetStrides(maxDims);
-        int stride = 1;
-        for (int i = maxDims - 1; i >= 0; --i) {
-            targetStrides[i] = stride;
-            stride *= static_cast<int>(targetShape[i]);
+            targetShape[maxDims - 1 - i] = std::max(dim1, dim2);
         }
 
         // 计算输入向量的步长
-        std::vector<int> strides1(maxDims, 0), strides2(maxDims, 0);
-        stride = 1;
+        std::vector<int64_t> strides1(maxDims, 0), strides2(maxDims, 0);
+        int64_t stride1 = 1, stride2 = 1;
         for (int i = static_cast<int>(shape1.size()) - 1; i >= 0; --i) {
-            strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride;
-            stride *= static_cast<int>(shape1[i]);
+            strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride1;
+            stride1 *= static_cast<int64_t>(shape1[i]);
         }
-        stride = 1;
         for (int i = static_cast<int>(shape2.size()) - 1; i >= 0; --i) {
-            strides2[maxDims - shape2.size() + i] = (shape2[i] == 1) ? 0 : stride;
-            stride *=  static_cast<int>(shape2[i]);
+            strides2[maxDims - shape2.size() + i] = shape2[i] == 1 ? 0 : stride2;
+            stride2 *= static_cast<int64_t>(shape2[i]);
         }
 
-        // 执行广播
-        auto b1 = std::make_shared<TensorStorage<T,CPUDevice>>(targetSize);
-        auto b2 = std::make_shared<TensorStorage<T,CPUDevice>>(targetSize);
-        std::vector indices(maxDims, 0);
-
-        const auto data_a = static_cast<const T*>(a.data());
-        const auto data_b = static_cast<const T*>(b.data());
-        for (int i = 0; i < targetSize; ++i) {
-            int index1 = 0, index2 = 0;
-            //计算 每个被复制变量位置 如果1为 只能在 +0 位置 如果大于1 就是 0...j 每次取完递增++indices[j]
-            for (int j = 0; j < maxDims; ++j) {
-                index1 += indices[j] * strides1[j];
-                index2 += indices[j] * strides2[j];
-            }
-            b1->getData()[i] = data_a[index1];
-            b1->getData()[i] = data_b[index2];
-
-            // 更新索引
-            for (int j = maxDims - 1; j >= 0; --j) {
-                //当前循环维度 小于目标维度
-                if (++indices[j] < targetShape[j]) {
-                    break;
-                }
-                //从第0个开始
-                indices[j] = 0;
-            }
-        }
-        static_cast<CPUTensor<T>&>(a).setTensorStorage(b1, Shape{targetShape});
-        static_cast<CPUTensor<T>&>(b).setTensorStorage(b2, Shape{targetShape});
-}
+        return {strides1, strides2, targetShape};
+    }
 
     // Explicit template instantiation
     template class CPUTensorOps<float>;

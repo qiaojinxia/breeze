@@ -8,6 +8,12 @@
 #include "TensorOps.h"
 
 namespace Breeze {
+    enum class TensorOpType {
+        Add,
+        Subtract,
+        Multiply,
+        Divide
+    };
     template<typename T>
     class CPUTensorOps final: public TensorOps<T>{
     public:
@@ -19,13 +25,11 @@ namespace Breeze {
 
         [[nodiscard]] std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& a, const Tensor<T>& b) const override;
 
-        void broadcastTensors(Tensor<T>& a, Tensor<T>& b) override;
+        [[nodiscard]] std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
+            broadcastTensors(const Tensor<T>& a,const Tensor<T>& b) const override;
+
         ~CPUTensorOps() override= default;
     private:
-        void multiply_non_recursive(const T* a, const T* b, T* result, const std::vector<size_t>& a_shape,
-                                             const std::vector<size_t>& b_shape,
-                                             const std::vector<size_t>& a_strides, const std::vector<size_t>& b_strides,
-                                             const std::vector<size_t>& result_strides) const;
 
         [[nodiscard]]  static std::vector<size_t> compute_strides(const std::vector<size_t>& shape);
     };

@@ -66,12 +66,17 @@ namespace Breeze {
     }
 
     template<typename T>
-    [[nodiscard]] std::vector<size_t> CPUTensor<T>::getStrides() const {
+    [[nodiscard]] std::vector<size_t> CPUTensor<T>::get_strides() const {
         if (!strides_.empty()) {
             return strides_;
         }
         return this->get_shape().strides();
-    };
+    }
+
+    template<typename T>
+    [[nodiscard]] std::vector<int64_t> CPUTensor<T>::get_steps() const  {
+        return this->steps_;
+    }
 
     template<typename T>
     void CPUTensor<T>::resize(const Shape& new_shape) {
@@ -119,7 +124,7 @@ namespace Breeze {
     const T& CPUTensor<T>::at(const std::vector<size_t>& indices) const {
         size_t offset = offset_;
         for (int64_t i = 0; i < indices.size(); ++i) {
-            auto stride = this->getStrides()[i];
+            auto stride = this->get_strides()[i];
             offset += (indices[i] * stride) * steps_[i];
         }
         return memory_block->getData()[offset];
@@ -274,7 +279,7 @@ namespace Breeze {
         for (int64_t i = static_cast<int64_t>(new_dims.size()) - 1; i >= 0; --i) {
             if (current_dim >= 0) {
                 if (new_dims[i] == current_shape[current_dim]) {
-                    new_strides[i] = this->getStrides()[current_dim];
+                    new_strides[i] = this->get_strides()[current_dim];
                     --current_dim;
                 } else if (current_shape[current_dim] == 1) {
                     new_strides[i] = 0;  // 广播维度的 stride 为 0

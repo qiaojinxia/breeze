@@ -29,13 +29,13 @@ int main() {
     tensor2.fill(3.0);
 
 
-    CPUTensor<float> tensor3({2, 3, 8});
+    CPUTensor<float> tensor3({2, 1, 8});
     tensor3.fill(4.0);
 
-    CPUTensor<float> tensor4({2, 3, 8});
-    tensor4.fill(2.0);
+    CPUTensor<float> tensor4({2, 3, 1});
+    tensor4.fill(3.0);
 
-
+    // MEASURE_TIME(tensor1.matmul(tensor2););
     const auto r1 = tensor1.matmul(tensor2);
     std::cout << *r1 << std::endl;
 
@@ -45,6 +45,10 @@ int main() {
 
 
     const auto r3 = tensor3 * tensor4;
+
+    auto r5 = *r2 + *r3;
+    std::cout << *r5 << std::endl;
+
     auto rs = r3->slice({KEEP, KEEP, {0, 9, 2 }});
     std::cout << *rs << std::endl;
     auto rs1 = rs->slice({KEEP, KEEP, {0, 9, 2 }});
@@ -57,7 +61,6 @@ int main() {
     CPUTensor<float> tensor6(Shape{2, 1, 4});
     tensor6.fill(2.0);
 
-    tensor5.broadcast(tensor6);
 
     // auto t1 = tensor5 + tensor6;
 
@@ -67,7 +70,7 @@ int main() {
     std::cout << tensor7 << std::endl;
 
     // MEASURE_TIME(const auto r1 = tensor3 * tensor4; );
-    // MEASURE_TIME(const auto r2 = tensor3 + tensor4; );
+    // MEASURE_TIME(const auto r_2 = tensor3 + tensor4; );
     // MEASURE_TIME(const auto r4 = tensor3 / tensor4; );
 
     // 输出梯度
