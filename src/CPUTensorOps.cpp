@@ -3,7 +3,7 @@
 #include "CPUTensorOps.h"
 #include "CPUTensor.h"
 #include <cblas.h>
-#if defined(__x86_64__) && defined(_M_X64)
+#if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #endif
 #if defined(__APPLE__) && defined(__ARM_NEON)
@@ -31,7 +31,7 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -70,6 +70,7 @@ namespace Breeze {
     // 减法实现
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::subtract(const Tensor<T>& a, const Tensor<T>& b) const {
+
         auto [a_strides, b_strides, target_shape] =
             this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
 
@@ -88,7 +89,7 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -122,7 +123,7 @@ namespace Breeze {
         }
 
         return result;
-}
+    }
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::multiply(const Tensor<T>& a, const Tensor<T>& b) const {
@@ -225,13 +226,14 @@ namespace Breeze {
                     vst1q_f64(result_data + result_offset + j, result_vec);
                 }
             }
-    #else
-            // Fallback scalar implementation
-            for (size_t j = 0; j < inner_dim; ++j) {
-                result_data[result_offset + j] =
-                    a_data[a_offset + j * a_inc] * b_data[b_offset + j * b_inc];
-            }
     #endif
+            else {
+                // Fallback scalar implementation
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    result_data[result_offset + j] =
+                        a_data[a_offset + j * a_inc] * b_data[b_offset + j * b_inc];
+                }
+            }
         }
 
         return result;
@@ -277,7 +279,7 @@ namespace Breeze {
             const int a_inc = a_strides.back() * a_steps.back();
             const int b_inc = b_strides.back() * b_steps.back();
 
-            #if defined(__x86_64__) || defined(_M_X64)
+    #if defined(__x86_64__) || defined(_M_X64)
             // x86/AVX2
             if constexpr (std::is_same_v<T, float>) {
                 for (size_t j = 0; j < inner_dim; j += 8) {
@@ -304,7 +306,7 @@ namespace Breeze {
                     if (_mm256_movemask_ps(_mm256_cmp_ps(b_vec, _mm256_setzero_ps(), _CMP_EQ_OQ)) != 0) {
                         throw std::runtime_error("Division by zero encountered.");
                     }
-                    __m256 result_vec = _mm256_div_ps(a_vec, b_vec);
+                    const __m256 result_vec = _mm256_div_ps(a_vec, b_vec);
                     _mm256_storeu_ps(result_data + result_offset + j, result_vec);
                 }
 
@@ -325,7 +327,7 @@ namespace Breeze {
                     if (_mm256_movemask_pd(_mm256_cmp_pd(b_vec, _mm256_setzero_pd(), _CMP_EQ_OQ)) != 0) {
                         throw std::runtime_error("Division by zero encountered.");
                     }
-                    __m256d result_vec = _mm256_div_pd(a_vec, b_vec);
+                    const __m256d result_vec = _mm256_div_pd(a_vec, b_vec);
                     _mm256_storeu_pd(result_data + result_offset + j, result_vec);
                 }
             }
@@ -333,33 +335,34 @@ namespace Breeze {
             // Apple Silicon/NEON
             if constexpr (std::is_same_v<T, float>) {
                 for (size_t j = 0; j < inner_dim; j += 4) {
-                    float32x4_t a_vec = vld1q_f32(a_data + a_offset + j * a_inc);
-                    float32x4_t b_vec = vld1q_f32(b_data + b_offset + j * b_inc);
+                    const float32x4_t a_vec = vld1q_f32(a_data + a_offset + j * a_inc);
+                    const float32x4_t b_vec = vld1q_f32(b_data + b_offset + j * b_inc);
                     if (vminvq_f32(b_vec) == 0.0f) {
                         throw std::runtime_error("Division by zero encountered.");
                     }
-                    float32x4_t result_vec = vdivq_f32(a_vec, b_vec);
+                    const float32x4_t result_vec = vdivq_f32(a_vec, b_vec);
                     vst1q_f32(result_data + result_offset + j, result_vec);
                 }
             } else if constexpr (std::is_same_v<T, double>) {
                 for (size_t j = 0; j < inner_dim; j += 2) {
-                    float64x2_t a_vec = vld1q_f64(a_data + a_offset + j * a_inc);
-                    float64x2_t b_vec = vld1q_f64(b_data + b_offset + j * b_inc);
+                    const float64x2_t a_vec = vld1q_f64(a_data + a_offset + j * a_inc);
+                    const float64x2_t b_vec = vld1q_f64(b_data + b_offset + j * b_inc);
                     if (vminvq_f64(b_vec) == 0.0) {
                         throw std::runtime_error("Division by zero encountered.");
                     }
-                    float64x2_t result_vec = vdivq_f64(a_vec, b_vec);
+                    const float64x2_t result_vec = vdivq_f64(a_vec, b_vec);
                     vst1q_f64(result_data + result_offset + j, result_vec);
                 }
             }
-    #else
+#endif
             // Fallback scalar implementation
-            for (size_t j = 0; j < inner_dim; ++j) {
-                T b_val = b_data[b_offset + j * b_inc];
-                if (b_val == 0) throw std::runtime_error("Division by zero encountered.");
-                result_data[result_offset + j] = a_data[a_offset + j * a_inc] / b_val;
+            else {
+                for (size_t j = 0; j < inner_dim; ++j) {
+                    const T b_val = b_data[b_offset + j * b_inc];
+                    if (b_val == 0) throw std::runtime_error("Division by zero encountered.");
+                    result_data[result_offset + j] = a_data[a_offset + j * a_inc] / b_val;
+                }
             }
-    #endif
         }
         return result;
     }
@@ -441,50 +444,6 @@ namespace Breeze {
             } else if constexpr (std::is_same_v<T, double>) {
                 cblas_dgemm(order, transA, transB, m, n, k, alpha, a_sub, k, b_sub, n, beta, result_sub, n);
             } else {
-    #if defined(__APPLE__) && defined(__ARM_NEON)
-                // NEON implementation for float
-                if constexpr (std::is_same_v<T, float>) {
-                    for (size_t i = 0; i < m; ++i) {
-                        for (size_t j = 0; j < n; j += 4) {
-                            float32x4_t sum = vdupq_n_f32(0.0f);
-                            for (size_t l = 0; l < k; ++l) {
-                                const float32x4_t a_val = vdupq_n_f32(a_sub[i * k + l]);
-                                const float32x4_t b_val = vld1q_f32(&b_sub[l * n + j]);
-                                sum = vmlaq_f32(sum, a_val, b_val);
-                            }
-                            vst1q_f32(&result_sub[i * n + j], sum);
-                        }
-                        // Handle remaining elements
-                        for (size_t j = n - (n % 4); j < n; ++j) {
-                            T sum = 0;
-                            for (size_t l = 0; l < k; ++l) {
-                                sum += a_sub[i * k + l] * b_sub[l * n + j];
-                            }
-                            result_sub[i * n + j] = sum;
-                        }
-                    }
-                } else if constexpr (std::is_same_v<T, double>) {
-                    for (size_t i = 0; i < m; ++i) {
-                        for (size_t j = 0; j < n; j += 2) {
-                            float64x2_t sum = vdupq_n_f64(0.0);
-                            for (size_t l = 0; l < k; ++l) {
-                                const float64x2_t a_val = vdupq_n_f64(a_sub[i * k + l]);
-                                const float64x2_t b_val = vld1q_f64(&b_sub[l * n + j]);
-                                sum = vmlaq_f64(sum, a_val, b_val);
-                            }
-                            vst1q_f64(&result_sub[i * n + j], sum);
-                        }
-                        // Handle remaining elements
-                        for (size_t j = n - (n % 2); j < n; ++j) {
-                            T sum = 0;
-                            for (size_t l = 0; l < k; ++l) {
-                                sum += a_sub[i * k + l] * b_sub[l * n + j];
-                            }
-                            result_sub[i * n + j] = sum;
-                        }
-                    }
-                }
-    #else
                 // Fallback scalar implementation
                 for (size_t i = 0; i < m; ++i) {
                     for (size_t j = 0; j < n; ++j) {
@@ -495,11 +454,11 @@ namespace Breeze {
                         result_sub[i * n + j] = sum;
                     }
                 }
-    #endif
             }
         }
         return result;
     }
+
     template<typename T>
     [[nodiscard]] std::vector<size_t> CPUTensorOps<T>::compute_strides(const std::vector<size_t>& shape) {
         if (shape.empty()) {
