@@ -8,8 +8,16 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(Armadillo REQUIRED)
 
 find_path(OpenBLAS_INCLUDE_DIR NAMES cblas.h PATHS /usr/local/opt/openblas/include)
-find_library(OpenBLAS_LIB NAMES openblas PATHS /usr/local/opt/openblas/lib)
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    # Apple Silicon (M1, M2, etc.)
+    find_library(OpenBLAS_LIB NAMES openblas PATHS /opt/homebrew/opt/openblas/lib)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    # Intel-based Mac
+    find_library(OpenBLAS_LIB NAMES openblas PATHS /usr/local/opt/openblas/lib)
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -mavx")
 
