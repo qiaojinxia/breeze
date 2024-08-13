@@ -26,7 +26,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& a, const Tensor<T>& b) const override;
 
         [[nodiscard]] std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
-            broadcastTensors(const Tensor<T>& a,const Tensor<T>& b) const override;
+            calc_broadcast_shape(const std::vector<size_t>& shape1, const std::vector<size_t>& shape2,bool matmul) const override;
 
         ~CPUTensorOps() override= default;
     private:

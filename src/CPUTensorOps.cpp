@@ -8,7 +8,8 @@
 namespace Breeze {
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::add(const Tensor<T>& a, const Tensor<T>& b) const {
-        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+        auto [a_strides, b_strides, target_shape] =
+            this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
 
         auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
 
@@ -61,11 +62,12 @@ namespace Breeze {
         return result;
     }
 
-
     // 减法实现
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::subtract(const Tensor<T>& a, const Tensor<T>& b) const {
-        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+        auto [a_strides, b_strides, target_shape] =
+            this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
+
         auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
 
         size_t outer_dim = 1;
@@ -119,7 +121,9 @@ namespace Breeze {
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::multiply(const Tensor<T>& a, const Tensor<T>& b) const {
-        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+        auto [a_strides, b_strides, target_shape] =
+              this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
+
 
         auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
 
@@ -211,7 +215,8 @@ namespace Breeze {
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::divide(const Tensor<T>& a, const Tensor<T>& b) const {
-        auto [a_strides, b_strides, target_shape] = this->broadcastTensors(a, b);
+        auto [a_strides, b_strides, target_shape] =
+             this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
 
         auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
 
@@ -303,41 +308,39 @@ namespace Breeze {
                 }
             }
         }
-
-    return result;
-}
+        return result;
+    }
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::matmul(const Tensor<T>& a, const Tensor<T>& b) const {
         // Get shapes of tensors a and b
-        const std::vector<size_t>& a_shape = a.get_shape().dims();
-        const std::vector<size_t>& b_shape = b.get_shape().dims();
+        const std::vector<size_t> a_shape = a.get_shape().dims();
+        const std::vector<size_t> b_shape = b.get_shape().dims();
 
         // Check for correct dimensions
         if (a_shape.size() < 2 || b_shape.size() < 2) {
             throw std::invalid_argument("Input tensors must have at least two dimensions for matrix multiplication.");
         }
 
+        // Check if inner dimensions match
         if (a_shape[a_shape.size() - 1] != b_shape[b_shape.size() - 2]) {
             throw std::invalid_argument("The inner dimensions must match for matrix multiplication.");
         }
 
-        // Determine the output shape
-        std::vector<size_t> result_shape = a_shape;
-        result_shape[result_shape.size() - 1] = b_shape[b_shape.size() - 1];
+        // Calculate the broadcast shape
+        auto [a_strides,b_strides, result_shape]=
+            this->calc_broadcast_shape(a_shape, b_shape,true);
 
         // Allocate result tensor
         auto result = std::make_shared<CPUTensor<T>>(Shape{result_shape});
 
         // Compute the strides for each tensor
-        const std::vector<size_t> a_strides = a.get_strides();
-        const std::vector<size_t> b_strides = b.get_strides();
         const std::vector<size_t> result_strides = result->get_strides();
 
-        const size_t depth = a_shape.size() - 2;
-        size_t m = a_shape[depth];
-        size_t k = a_shape[depth + 1];
-        size_t n = b_shape[depth + 1];
+        const size_t depth = result_shape.size() - 2;
+        size_t m = a_shape[a_shape.size() - 2];
+        size_t k = a_shape[a_shape.size() - 1];
+        size_t n = b_shape[b_shape.size() - 1];
 
         CBLAS_ORDER order = CblasRowMajor;
         CBLAS_TRANSPOSE transA = CblasNoTrans;
@@ -345,10 +348,10 @@ namespace Breeze {
         T alpha = static_cast<T>(1.0);
         T beta = static_cast<T>(0.0);
 
-        // Calculate the number of 2D matrices (product of dimensions up to 'depth')
+        // Calculate the number of 2D matrices
         size_t num_matrices = 1;
         for (size_t i = 0; i < depth; ++i) {
-            num_matrices *= a_shape[i];
+            num_matrices *= result_shape[i];
         }
 
         const T* a_data = a.data();
@@ -358,19 +361,19 @@ namespace Breeze {
         const auto& b_steps = b.get_steps();
 
         // Parallelize using OpenMP
-#pragma omp parallel for
+    #pragma omp parallel for
         for (size_t idx = 0; idx < num_matrices; ++idx) {
             std::vector<size_t> coords(depth);
             size_t temp = idx;
             for (int i = static_cast<int>(depth) - 1; i >= 0; --i) {
-                coords[i] = temp % a_shape[i];
-                temp /= a_shape[i];
+                coords[i] = temp % result_shape[i];
+                temp /= result_shape[i];
             }
 
             size_t a_offset = 0, b_offset = 0, result_offset = 0;
             for (size_t i = 0; i < depth; ++i) {
-                a_offset += coords[i] * a_strides[i] * a_steps[i];
-                b_offset += coords[i] * b_strides[i] * b_steps[i];
+                a_offset += (coords[i] % a_shape[i]) * a_strides[i] * a_steps[i];
+                b_offset += (coords[i] % b_shape[i]) * b_strides[i] * b_steps[i];
                 result_offset += coords[i] * result_strides[i];
             }
 
@@ -406,9 +409,8 @@ namespace Breeze {
                 }
             }
         }
-
         return result;
-}
+    }
 
     template<typename T>
     [[nodiscard]] std::vector<size_t> CPUTensorOps<T>::compute_strides(const std::vector<size_t>& shape) {
@@ -424,31 +426,51 @@ namespace Breeze {
             strides[i] = strides[i + 1] * shape[i + 1];
         }
         return strides;
-}
+    }
 
     template<typename T>
     std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
-        CPUTensorOps<T>::broadcastTensors(const Tensor<T>& a, const Tensor<T>& b) const{
-        const std::vector<size_t>& shape1 = a.get_shape().dims();
-        const std::vector<size_t>& shape2 = b.get_shape().dims();
-
+    CPUTensorOps<T>::calc_broadcast_shape(const std::vector<size_t>& shape1, const std::vector<size_t>& shape2,const bool matmul) const {
         // 计算目标形状
         std::vector<size_t> targetShape;
         const int maxDims = static_cast<int>(std::max(shape1.size(), shape2.size()));
         targetShape.resize(maxDims);
 
-        for (int i = 0; i < maxDims; ++i) {
-            const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
-            const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
-            if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
-                throw std::runtime_error("Incompatible shapes for broadcasting");
+        if (matmul) {
+            // 特殊处理矩阵乘法的情况
+            if (shape1.size() < 2 || shape2.size() < 2) {
+                throw std::runtime_error("For matmul, both shapes must have at least 2 dimensions");
             }
-            targetShape[maxDims - 1 - i] = std::max(dim1, dim2);
+
+            // 处理除最后两个维度之外的部分
+            for (int i = 0; i < maxDims - 2; ++i) {
+                const size_t dim1 = i < shape1.size() - 2 ? shape1[i] : 1;
+                const size_t dim2 = i < shape2.size() - 2 ? shape2[i] : 1;
+                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                    throw std::runtime_error("Incompatible shapes for broadcasting in matmul");
+                }
+                targetShape[i] = std::max(dim1, dim2);
+            }
+
+            // 处理最后两个维度
+            targetShape[maxDims - 2] = shape1[shape1.size() - 2];
+            targetShape[maxDims - 1] = shape2[shape2.size() - 1];
+        } else {
+            // 原始的广播逻辑
+            for (int i = 0; i < maxDims; ++i) {
+                const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
+                const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
+                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                    throw std::runtime_error("Incompatible shapes for broadcasting");
+                }
+                targetShape[maxDims - 1 - i] = std::max(dim1, dim2);
+            }
         }
 
         // 计算输入向量的步长
         std::vector<int64_t> strides1(maxDims, 0), strides2(maxDims, 0);
         int64_t stride1 = 1, stride2 = 1;
+        // 矩阵乘法的步长计算
         for (int i = static_cast<int>(shape1.size()) - 1; i >= 0; --i) {
             strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride1;
             stride1 *= static_cast<int64_t>(shape1[i]);

@@ -30,7 +30,6 @@ public:
 
     virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
 
-    virtual void broadcast(Tensor& rhs) = 0;
 
     virtual void resize(const Shape& new_shape) = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const = 0;
@@ -47,7 +46,9 @@ public:
     virtual void to_gpu() = 0;
     virtual void print(std::ostream& os) const = 0;
     [[nodiscard]] virtual bool is_contiguous() const = 0;
+
     virtual void fill(T value) = 0;
+    virtual void fill(const std::function<T(const std::vector<size_t>&)>& value_func) = 0;
 
     [[nodiscard]] const Shape& get_shape() const;
     [[nodiscard]] Device get_device() const;

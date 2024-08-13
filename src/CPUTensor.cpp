@@ -23,8 +23,9 @@ namespace Breeze {
             const size_t offset, const std::vector<size_t>&& shape_size, std::vector<int64_t> steps, const bool contiguous)
             : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
             memory_block(data),offset_(offset),
-            strides_(std::accumulate(shape_size.begin(), shape_size.end(), 1ULL, std::multiplies<>())),
             steps_(std::move(steps)), is_contiguous_(contiguous){
+        auto strides = Shape(shape_size).strides();
+        this->strides_ = strides;
     }
 
     template<typename T>
@@ -58,11 +59,6 @@ namespace Breeze {
     template<typename T>
     [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::matmul(const Tensor<T>& rhs) const {
         return this->ops->matmul(*this, rhs);
-    }
-
-    template<typename T>
-    void CPUTensor<T>::broadcast(Tensor<T>& rhs) {
-        this->ops->broadcastTensors(*this, rhs);
     }
 
     template<typename T>
@@ -109,7 +105,35 @@ namespace Breeze {
 
     template<typename T>
     void CPUTensor<T>::fill(T value) {
-        std::fill(data(), data() + this->size(), value);
+        fill([&](const std::vector<size_t>& _coords) {return value;});
+    }
+
+    template<typename T>
+    void CPUTensor<T>::fill(const std::function<T(const std::vector<size_t>&)>& value_func) {
+        std::vector<size_t> indices(this->get_shape().ndim(), 0);
+        const auto& dims = this->get_shape().dims();
+        const auto& strides = this->get_strides();
+        const auto& steps = this->steps_;
+        const size_t total_elements = this->get_shape().total_size();
+
+        for (size_t i = 0; i < total_elements; ++i) {
+            // 计算偏移量
+            size_t offset = offset_;
+            for (int64_t j = 0; j < indices.size(); ++j) {
+                offset += indices[j] * strides[j] * steps_[j];
+            }
+
+            // 填充当前位置
+            memory_block->getData()[offset] = value_func(indices);
+
+            // 更新索引
+            for (int64_t dim = static_cast<int64_t>(indices.size()) - 1; dim >= 0; --dim) {
+                if (++indices[dim] < dims[dim]) {
+                    break;
+                }
+                indices[dim] = 0;
+            }
+        }
     }
 
     template<typename T>
@@ -121,7 +145,7 @@ namespace Breeze {
     }
 
     template<typename T>
-    const T& CPUTensor<T>::at(const std::vector<size_t>& indices) const {
+    const T& CPUTensor<T>::at(const std::vector<size_t>& indices) const{
         size_t offset = offset_;
         for (int64_t i = 0; i < indices.size(); ++i) {
             auto stride = this->get_strides()[i];

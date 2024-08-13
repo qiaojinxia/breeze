@@ -24,8 +24,6 @@ namespace Breeze {
 
         std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
 
-        void broadcast(Tensor<T>& rhs) override;
-
         void resize(const Shape& new_shape) override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::tuple<int64_t, int64_t, int64_t>>& ranges) const override;
@@ -45,6 +43,8 @@ namespace Breeze {
 
         void fill(T value) override;
 
+        void fill(const std::function<T(const std::vector<size_t>&)>& value_func) override;
+
         [[nodiscard]] std::vector<int64_t> get_steps() const override;
 
         void setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape);
@@ -52,9 +52,10 @@ namespace Breeze {
         [[nodiscard]] std::vector<size_t> get_strides() const override;
 
     private:
+
         std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block;
         size_t offset_ = 0;
-        std::vector<size_t> strides_ = {};
+        std::vector<size_t> strides_;
         std::vector<int64_t> steps_;
         bool is_contiguous_ = true;
     };

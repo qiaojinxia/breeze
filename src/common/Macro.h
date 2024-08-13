@@ -14,4 +14,8 @@
     std::cout << "Elapsed time: " << elapsed.count() << " ms" << std::endl; \
     } while (0)
 #define KEEP {0, KEEP_ALL, 1}
+
+#define S_(x , y) {x, y, 1}
+
+
 #endif //MACRO_H
