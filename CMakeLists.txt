@@ -2,47 +2,89 @@ cmake_minimum_required(VERSION 3.28)
 project(breeze)
 
 set(CMAKE_CXX_STANDARD 17)
-
-
-# 查找 Armadillo 库
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Armadillo REQUIRED)
 
-find_path(OpenBLAS_INCLUDE_DIR NAMES cblas.h PATHS /usr/local/opt/openblas/include)
+# 查找 OpenBLAS
+if(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+        set(CMAKE_C_COMPILER "/usr/local/bin/gcc")
+        # Apple Silicon (M1, M2, etc.)
+        set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+        # Intel-based Mac
+        set(OpenBLAS_ROOT "/usr/local/opt/openblas")
+    else()
+        message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-    # Apple Silicon (M1, M2, etc.)
-    find_library(OpenBLAS_LIB NAMES openblas PATHS /opt/homebrew/opt/openblas/lib)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    # Intel-based Mac
-    find_library(OpenBLAS_LIB NAMES openblas PATHS /usr/local/opt/openblas/lib)
+    find_path(OpenBLAS_INCLUDE_DIR NAMES cblas.h PATHS ${OpenBLAS_ROOT}/include NO_DEFAULT_PATH)
+    find_library(OpenBLAS_LIB NAMES openblas PATHS ${OpenBLAS_ROOT}/lib NO_DEFAULT_PATH)
 else()
-    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    find_package(OpenBLAS REQUIRED)
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -mavx")
+# 查找 OpenMP 库
+if(OpenMP_CXX_FOUND)
+    # OpenMP 找到了，使用 CMake 提供的变量
+    set(OpenMP_CXX_FLAGS ${OpenMP_CXX_FLAGS})
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
+else()
+    # OpenMP 没有找到，手动设置（注意：路径可能需要根据您的系统进行调整）
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+endif()
 
-add_compile_definitions(ACCELERATE_NEW_LAPACK ACCELERATE_LAPACK_ILP64)
+find_package(OpenMP REQUIRED COMPONENTS CXX)
 
-add_executable(breeze src/main.cpp
+# 定义源文件
+set(SOURCES
+        src/main.cpp
         src/node.cpp
+        src/CPUTensorOps.cpp
+        src/CPUTensor.cpp
+)
+
+# 定义头文件（可选）
+set(HEADERS
         src/node.h
         src/loss_functions.h
         src/Tensor.h
         src/TensorOps.h
-        src/CPUTensorOps.cpp
         src/CPUTensorOps.h
-        src/CPUTensor.cpp
         src/CPUTensor.h
         src/TensorStorage.h
         src/common/Const.h
         src/common/Macro.h
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DACCELERATE_NEW_LAPACK")
-# 链接 Armadillo 库
-target_link_libraries(breeze ${ARMADILLO_LIBRARIES})
-target_link_libraries(breeze ${OpenBLAS_LIB})
+# 添加可执行文件
+add_executable(breeze ${SOURCES})
 
-target_include_directories(breeze PRIVATE ${OpenBLAS_INCLUDE_DIR})
-# 包含 Armadillo 头文件
-target_include_directories(breeze PRIVATE ${ARMADILLO_INCLUDE_DIRS})
+# 添加编译定义
+target_compile_definitions(breeze PRIVATE
+        ACCELERATE_NEW_LAPACK
+        ACCELERATE_LAPACK_ILP64
+        mavx # If this is a macro you need
+)
+target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} )
+
+# 设置包含目录
+target_include_directories(breeze PRIVATE
+        ${ARMADILLO_INCLUDE_DIRS}
+        ${OpenBLAS_INCLUDE_DIR}
+        ${OpenMP_CXX_INCLUDE_DIRS} # 添加 OpenMP 的包含目录
+)
+
+# 链接库
+target_link_libraries(breeze PRIVATE
+        ${ARMADILLO_LIBRARIES}
+        ${OpenBLAS_LIB}
+        OpenMP::OpenMP_CXX # 添加 OpenMP 链接
+)
+
+# 如果使用 C++17 的特性，确保编译器支持
+target_compile_features(breeze PRIVATE cxx_std_17)
