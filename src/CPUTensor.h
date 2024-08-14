@@ -51,6 +51,7 @@ namespace Breeze {
 
         [[nodiscard]] std::vector<size_t> get_strides() const override;
 
+        static std::shared_ptr<CPUTensor> arrange(T  begin,T end,T step);
     private:
 
         std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block;

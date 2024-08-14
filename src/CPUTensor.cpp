@@ -1,7 +1,7 @@
 #include "CPUTensor.h"
 #include <algorithm>
 #include <stdexcept>
-
+#include <omp.h>
 #include "CPUTensorOps.h"
 #include "common/Const.h"
 namespace Breeze {
@@ -320,6 +320,18 @@ namespace Breeze {
         }
         this->shape = new_shape;
         this->strides_ = new_strides;
+    }
+
+    template <typename T>
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(T  begin,T end,T step ) {
+        const auto m_size = static_cast<size_t>((end - begin + 1) /  step);
+        auto tensor = std::make_shared<CPUTensor>(Shape{std::vector{m_size}});
+        #pragma omp parallel for
+        for(size_t i = 0; i< tensor->get_shape().total_size(); ++i) {
+            auto data_ptr = tensor->data() + i;
+            *data_ptr = begin + i * step;
+        }
+        return tensor;
     }
 
 // Explicit instantiation for common types
