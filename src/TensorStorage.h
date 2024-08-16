@@ -6,6 +6,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <numeric>
+#include "common/Utils.h"
 
 namespace Breeze {
     struct CPUDevice {};
@@ -132,14 +133,7 @@ namespace Breeze {
         }
 
         [[nodiscard]] std::vector<size_t> strides() const {
-            std::vector<size_t> strides(dims_.size());
-            size_t stride = 1;
-            const int dim_size = static_cast<int>(dims_.size());
-            for (int i = dim_size - 1; i >= 0; --i) {
-                strides[i] = stride;
-                stride *= dims_[i];
-            }
-            return strides;
+            return Utils::compute_strides(this->dims());
         }
 
         bool operator==(const Shape& other) const {

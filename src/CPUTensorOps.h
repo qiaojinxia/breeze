@@ -29,9 +29,7 @@ namespace Breeze {
             calc_broadcast_shape(const std::vector<size_t>& shape1, const std::vector<size_t>& shape2,bool matmul) const override;
 
         ~CPUTensorOps() override= default;
-    private:
 
-        [[nodiscard]]  static std::vector<size_t> compute_strides(const std::vector<size_t>& shape);
     };
 
 }

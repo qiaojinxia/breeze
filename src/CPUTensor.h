@@ -27,15 +27,17 @@ namespace Breeze {
         std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
 
         void resize(const Shape& new_shape) override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> reshape(const std::vector<int32_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> view(std::vector<size_t>&& new_shape) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> view(const std::vector<int32_t>& new_shape) const override;
         void expand(const Shape&& new_shape) override;
 
         static std::shared_ptr<CPUTensor> cat(const std::vector<CPUTensor*>& tensors, int32_t dim);
 
         T* data() override;
         const T* data() const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> clone() const override;
 
         [[nodiscard]] const T& at(const std::vector<size_t>& indices) const override;
         void set_value(const std::vector<size_t>& indices,T value) override;

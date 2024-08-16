@@ -38,7 +38,6 @@ int main() {
     tensor4.fill(3.0);
 
 
-
     // MEASURE_TIME(tensor1_s->matmul(tensor2));
     const auto r1 = tensor1_s->matmul(tensor2);
     std::cout << *r1 << std::endl;
@@ -94,6 +93,29 @@ int main() {
     //连续拼接
     MEASURE_TIME(auto t5 = CPUTensor<float>::cat({&tensor9, &tensor10},1));
     std::cout << *t4 << std::endl;
+
+    auto s_tensor8_c = s_tensor8->clone();
+    std::cout << *s_tensor8_c << std::endl;
+    std::cout << "复制后是否连续" << s_tensor8_c->is_contiguous() << std::endl;
+
+    // 切片 克隆后view
+    auto s_tensor8_c_v = s_tensor8_c->view({2,-1});
+    std::cout << *s_tensor8_c_v << std::endl;
+
+    CPUTensor<float> tensor11(Shape{2, 12});
+    tensor11.fill(2.0);
+
+    // clone 后测试加法是否异常
+    auto t5 = tensor11 + *s_tensor8_c_v;
+    std::cout << *t5 << std::endl;
+
+    // 对expand的进行 clone
+    CPUTensor<float> tensor12(Shape{2, 1});
+    tensor12.fill(6.0);
+    tensor12.expand({2,12});
+    auto t6 = tensor12.clone();
+    std::cout << *t6 << std::endl;
+
     // std::cout << *t5 << std::endl;
     // MEASURE_TIME(const auto r1 = tensor3 * tensor4; );
     // MEASURE_TIME(const auto r_2 = tensor3 + tensor4; );

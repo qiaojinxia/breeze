@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include "CPUTensorOps.h"
 #include "common/Const.h"
+
 namespace Breeze {
     template<typename T>
     CPUTensor<T>::~CPUTensor() {
@@ -82,6 +83,50 @@ namespace Breeze {
     }
 
     template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::reshape(const std::vector<int32_t>& new_shape) const {
+        // 计算新形状的总元素数
+        size_t new_size = 1;
+        int32_t dynamic_dim = -1;
+        for (size_t i = 0; i < new_shape.size(); ++i) {
+            if (new_shape[i] == -1) {
+                if (dynamic_dim != -1) {
+                    throw std::invalid_argument("Only one dimension can be -1 in reshape");
+                }
+                dynamic_dim = static_cast<int32_t>(i);
+            } else if (new_shape[i] < 0) {
+                throw std::invalid_argument("Invalid negative dimension in reshape");
+            } else {
+                new_size *= new_shape[i];
+            }
+        }
+
+        // 处理动态维度
+        std::vector<int32_t> actual_new_shape = new_shape;
+        if (dynamic_dim != -1) {
+            if (this->size() % new_size != 0) {
+                throw std::invalid_argument("New shape is not compatible with the number of elements");
+            }
+            actual_new_shape[dynamic_dim] = this->size() / new_size;
+            new_size = this->size();
+        }
+
+        // 检查新旧大小是否匹配
+        if (new_size != this->size()) {
+            throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
+        }
+
+        // 如果张量是连续的，使用 view
+        if (this->is_contiguous()) {
+            return this->view(std::move(actual_new_shape));
+        }
+
+        // 如果张量不是连续的，先 clone 再 view
+        auto cloned = this->clone();
+        return cloned->view(std::move(actual_new_shape));
+
+    }
+
+    template<typename T>
     void CPUTensor<T>::resize(const Shape& new_shape) {
         if (new_shape.total_size() != this->shape.total_size()) {
             throw std::invalid_argument("New shape must have the same total size");
@@ -154,12 +199,11 @@ namespace Breeze {
             size_t expected_stride = 1;
             for (int i = strides_.size() - 1; i >= 0; --i) {
                 if (strides_[i] == 0) {
-                    continue;
+                    return false;
                 }
                 if (strides_[i] != expected_stride) return false;
                 expected_stride *= this->get_shape().dims()[i];
             }
-
             return true;
         }
 
@@ -298,26 +342,109 @@ namespace Breeze {
 
 
     template <typename T>
-    std::shared_ptr<Tensor<T>> CPUTensor<T>::view(std::vector<size_t>&& new_shape) const {
-        // 检查张量是否连续
-        if (!is_contiguous()) {
-            throw std::runtime_error("Cannot perform view on non-contiguous tensor");
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::clone() const {
+            const auto& src_shape = this->shape.dims();
+            const auto ndim = this->shape.ndim();
+            const auto& src_strides = this->get_strides();
+            const auto& src_steps = this->get_steps();
+            const T* src_data = this->data();
+
+            auto dst_tensor = std::make_shared<CPUTensor<T>>(Shape{src_shape});
+            T* dst_data = dst_tensor->data();
+
+            // 快速路径：如果源张量是连续的，直接进行整体复制
+            if (this->is_contiguous()) {
+                std::memcpy(dst_data, src_data + this->offset_, this->size() * sizeof(T));
+                return dst_tensor;
+            }
+
+            // 计算外部循环的维度
+            size_t outer_dim = 1;
+            for (size_t d = 0; d < ndim - 1; ++d) {
+                outer_dim *= src_shape[d];
+            }
+
+            const size_t copy_size = src_shape.back();
+            const size_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
+
+    #pragma omp parallel for if(outer_dim > 1000)
+            for (size_t i = 0; i < outer_dim; ++i) {
+                size_t src_offset = offset_;
+                size_t dst_offset = 0;
+                size_t idx = i;
+
+                for (int32_t j = ndim - 2; j >= 0; --j) {
+                    size_t _idx_ = idx % src_shape[j];
+                    idx /= src_shape[j];
+                    src_offset += _idx_ * src_strides[j] * src_steps[j];
+                    dst_offset += _idx_ * dst_tensor->get_strides()[j];
+                }
+
+                if constexpr (std::is_same_v<T, float>) {
+                    cblas_scopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
+                } else if constexpr (std::is_same_v<T, double>) {
+                    cblas_dcopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
+                } else {
+                    std::copy_n(src_data + src_offset, copy_size, dst_data + dst_offset);
+                }
+            }
+
+            return dst_tensor;
         }
 
-        // 检查新形状是否合法
-        size_t new_total_size = 1;
-        for (const auto& dim : new_shape) {
-            new_total_size *= dim;
+    template <typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::view(const std::vector<int32_t>& new_shape) const {
+            // 检查张量是否连续
+            if (!is_contiguous()) {
+                throw std::runtime_error("Cannot perform view on non-contiguous tensor");
+            }
+
+            // 处理自动计算维度
+            const int32_t total_size = this->get_shape().total_size();
+            int32_t new_total_size = 1;
+            int32_t dynamic_dim = -1;
+
+            for (size_t i = 0; i < new_shape.size(); ++i) {
+                if (new_shape[i] == -1) {
+                    if (dynamic_dim != -1) {
+                        throw std::invalid_argument("Only one dimension can be -1 in view");
+                    }
+                    dynamic_dim = static_cast<int32_t>(i);
+                } else if (new_shape[i] < 0) {
+                    throw std::invalid_argument("Invalid negative dimension in view");
+                } else {
+                    new_total_size *= new_shape[i];
+                }
+            }
+
+            // 计算动态维度
+            std::vector<size_t> final_shape;
+            final_shape.reserve(new_shape.size());
+
+            if (dynamic_dim != -1) {
+                if (total_size % new_total_size != 0) {
+                    throw std::invalid_argument("New shape is not compatible with the number of elements");
+                }
+                for (size_t i = 0; i < new_shape.size(); ++i) {
+                    if (i == dynamic_dim) {
+                        final_shape.push_back(total_size / new_total_size);
+                    } else {
+                        final_shape.push_back(new_shape[i]);
+                    }
+                }
+            } else {
+                // 检查新形状是否合法
+                if (new_total_size != total_size) {
+                    throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
+                }
+                for (const auto& dim : new_shape) {
+                    final_shape.push_back(dim);
+                }
+            }
+
+            // 返回新的张量视图
+            return std::make_shared<CPUTensor>(this->memory_block, std::move(final_shape));
         }
-
-        if (new_total_size != this->get_shape().total_size()) {
-            throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
-        }
-
-        // 返回新的张量视图
-        return std::make_shared<CPUTensor>(this->memory_block, std::move(new_shape));
-    }
-
 
     template <typename T>
     void CPUTensor<T>::expand(const Shape&& new_shape)  {

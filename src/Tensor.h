@@ -32,13 +32,16 @@ public:
 
 
     virtual void resize(const Shape& new_shape) = 0;
+    virtual std::shared_ptr<Tensor> reshape(const std::vector<int32_t>& new_shape) const = 0;
+
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const  = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> view(std::vector<size_t>&& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> view(const std::vector<int32_t>& new_shape) const = 0;
     virtual void expand(const Shape&& new_shape) = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
     [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
     virtual void set_value(const std::vector<size_t>& indices,T value) = 0;
 
@@ -71,7 +74,16 @@ private:
 
     template<typename T>
     size_t Tensor<T>::size() const {
-        return shape.total_size();
+        size_t store_size = 1;
+        const auto& dims = shape.dims();
+        const auto& strides = get_strides();
+
+        for (size_t i = 0; i < dims.size(); ++i) {
+            if ( strides[i] != 0 ) {
+                store_size *= dims[i];
+            }
+        }
+        return store_size;
     }
 
     template<typename T>

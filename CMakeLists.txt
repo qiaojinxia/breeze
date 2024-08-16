@@ -46,6 +46,7 @@ set(SOURCES
         src/node.cpp
         src/CPUTensorOps.cpp
         src/CPUTensor.cpp
+        src/common/Utils.h
 )
 
 # 定义头文件（可选）
