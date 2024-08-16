@@ -62,7 +62,6 @@ int main() {
     CPUTensor<float> tensor6(Shape{2, 1, 4});
     tensor6.fill(2.0);
 
-
     // auto t1 = tensor5 + tensor6;
 
     CPUTensor<float> tensor7(Shape{1, 4});
@@ -116,10 +115,26 @@ int main() {
     auto t6 = tensor12.clone();
     std::cout << *t6 << std::endl;
 
+
+    // CPUTensor<float> tensor13(Shape{12});
+    tensor12.fill(7.0);
+    auto t7 = tensor12.unsqueeze(0);
+    std::cout << tensor12 << std::endl;
+    std::cout << *t7 << std::endl;
+    auto t8 = t7->squeeze(0);
+    std::cout << *t8 << std::endl;
+
+
+    CPUTensor<float> tensor13(Shape{1, 4});
+    tensor13.fill(8.0);
+    tensor13.expand({1,4});
+    auto t9 = tensor13.squeeze(0);
+    std::cout << *t9 << std::endl;
+
     // std::cout << *t5 << std::endl;
-    // MEASURE_TIME(const auto r1 = tensor3 * tensor4; );
-    // MEASURE_TIME(const auto r_2 = tensor3 + tensor4; );
-    // MEASURE_TIME(const auto r4 = tensor3 / tensor4; );
+    // MEASURE_TIME(const auto r1 = tensor3 * tensor4;);
+    // MEASURE_TIME(const auto r_2 = tensor3 + tensor4;);
+    // MEASURE_TIME(const auto r4 = tensor3 / tensor4;);
 
     // 输出梯度
     // std::cout << "∂L/∂x = " << x->grad << std::endl;

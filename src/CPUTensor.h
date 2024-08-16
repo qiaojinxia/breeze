@@ -31,6 +31,9 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> view(const std::vector<int32_t>& new_shape) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> unsqueeze(int32_t dim) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> squeeze(int32_t dim) const override;
+
         void expand(const Shape&& new_shape) override;
 
         static std::shared_ptr<CPUTensor> cat(const std::vector<CPUTensor*>& tensors, int32_t dim);

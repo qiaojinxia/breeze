@@ -37,6 +37,9 @@ public:
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const  = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> view(const std::vector<int32_t>& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> unsqueeze(int32_t dim) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze(int32_t dim) const = 0;
+
     virtual void expand(const Shape&& new_shape) = 0;
 
     virtual T* data() = 0;

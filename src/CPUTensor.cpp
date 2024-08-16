@@ -336,7 +336,7 @@ namespace Breeze {
 
         }
 
-        return std::make_shared<CPUTensor>(this->memory_block, new_offset,
+        return std::make_shared<CPUTensor>(memory_block, new_offset,
             std::move(new_shape), std::move(new_steps), std::move(new_strides));
     }
 
@@ -349,7 +349,7 @@ namespace Breeze {
             const auto& src_steps = this->get_steps();
             const T* src_data = this->data();
 
-            auto dst_tensor = std::make_shared<CPUTensor<T>>(Shape{src_shape});
+            auto dst_tensor = std::make_shared<CPUTensor>(Shape{src_shape});
             T* dst_data = dst_tensor->data();
 
             // 快速路径：如果源张量是连续的，直接进行整体复制
@@ -443,8 +443,86 @@ namespace Breeze {
             }
 
             // 返回新的张量视图
-            return std::make_shared<CPUTensor>(this->memory_block, std::move(final_shape));
+            return std::make_shared<CPUTensor>(memory_block, std::move(final_shape));
         }
+
+
+    template<typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::unsqueeze(const int32_t dim) const {
+        const auto& original_shape = this->get_shape().dims();
+        const auto& original_strides = this->get_strides();
+        const auto& original_steps = this->get_steps();
+
+        std::vector<size_t> new_shape;
+        std::vector<size_t> new_strides;
+        std::vector<int32_t> new_steps;
+
+        new_shape.reserve(original_shape.size() + 1);
+        new_strides.reserve(original_shape.size() + 1);
+        new_steps.reserve(original_shape.size() + 1);
+
+        // 处理负数维度
+        const int32_t adjusted_dim = dim < 0 ? static_cast<int32_t>(original_shape.size()) + dim + 1 : dim;
+
+        for (int32_t i = 0; i < original_shape.size() + 1; ++i) {
+            if (i == adjusted_dim) {
+                new_shape.push_back(1);
+                new_strides.push_back(1);
+                new_steps.push_back(1);
+            }
+
+            if (i < original_shape.size()) {
+                new_shape.push_back(original_shape[i]);
+                new_strides.push_back(original_strides[i]);
+                new_steps.push_back(original_steps[i]);
+            }
+        }
+
+
+        new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
+
+        return std::make_shared<CPUTensor<T>>(this->memory_block, this->offset_,
+           std::move(new_shape), std::move(new_steps), std::move(new_strides));
+    }
+
+    template<typename T>
+ std::shared_ptr<Tensor<T>> CPUTensor<T>::squeeze(const int32_t dim) const {
+        const auto& original_shape = this->get_shape().dims();
+        const auto& original_strides = this->get_strides();
+        const auto& original_steps = this->get_steps();
+
+        std::vector<size_t> new_shape;
+        std::vector<size_t> new_strides;
+        std::vector<int32_t> new_steps;
+
+        new_shape.reserve(original_shape.size());
+        new_strides.reserve(original_shape.size());
+        new_steps.reserve(original_shape.size());
+
+        const int32_t adjusted_dim = dim < 0 ? static_cast<int32_t>(original_shape.size()) + dim : dim;
+
+        for (size_t i = 0; i < original_shape.size(); ++i) {
+            // 如果 不是当前维度 维度不是1 或者广播 维度 都去不掉
+            if (static_cast<int32_t>(i) != adjusted_dim || original_shape[i] != 1 || original_strides[i] == 0) {
+                new_shape.push_back(original_shape[i]);
+                new_strides.push_back(original_strides[i]);
+                new_steps.push_back(original_steps[i]);
+            }
+        }
+
+        // 如果所有维度都被移除，保留一个维度
+        if (new_shape.empty()) {
+            new_shape.push_back(1);
+            new_strides.push_back(1);
+            new_steps.push_back(1);
+        }
+
+        // 使用新函数重新计算strides
+        new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
+
+        return std::make_shared<CPUTensor>(this->memory_block, this->offset_,
+            std::move(new_shape), std::move(new_steps), std::move(new_strides));
+    }
 
     template <typename T>
     void CPUTensor<T>::expand(const Shape&& new_shape)  {
@@ -527,7 +605,7 @@ namespace Breeze {
         }
         new_shape[dim] = concat_dim_size;
 
-        auto result = std::make_shared<CPUTensor<T>>(Shape{new_shape});
+        auto result = std::make_shared<CPUTensor>(Shape{new_shape});
         T* result_data = result->data();
 
         // 计算每次复制的块大小（不包括最后一维）
