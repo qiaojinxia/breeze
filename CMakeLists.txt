@@ -33,9 +33,9 @@ if(OpenMP_CXX_FOUND)
     set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
 else()
     # OpenMP 没有找到，手动设置（注意：路径可能需要根据您的系统进行调整）
-    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/Cellar/libomp/18.1.8/include")
     set(OpenMP_CXX_LIB_NAMES "omp")
-    set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+    set(OpenMP_omp_LIBRARY "/usr/local/Cellar/libomp/18.1.8/lib/libomp.dylib")
 endif()
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
@@ -68,9 +68,9 @@ add_executable(breeze ${SOURCES})
 target_compile_definitions(breeze PRIVATE
         ACCELERATE_NEW_LAPACK
         ACCELERATE_LAPACK_ILP64
-        mavx # If this is a macro you need
+
 )
-target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} )
+target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} "-mavx" )
 
 # 设置包含目录
 target_include_directories(breeze PRIVATE

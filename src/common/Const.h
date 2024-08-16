@@ -6,7 +6,7 @@
 #define CONST_H
 #include <numeric>
 
-const int64_t KEEP_ALL = std::numeric_limits<int64_t>::max();
-const int64_t KEEP_REST = std::numeric_limits<int64_t>::max() - 1;
+const int32_t KEEP_ALL = std::numeric_limits<int32_t>::max();
+const int32_t KEEP_REST = std::numeric_limits<int32_t>::max() - 1;
 
 #endif //CONST_H

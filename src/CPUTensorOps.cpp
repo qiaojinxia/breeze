@@ -31,7 +31,6 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-        #pragma omp parallel for
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -89,7 +88,7 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-        #pragma omp parallel for
+
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -145,7 +144,6 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-        #pragma omp parallel for
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -166,7 +164,8 @@ namespace Breeze {
 
             #if defined(__x86_64__) || defined(_M_X64)
             // x86/AVX2
-            if constexpr (std::is_same_v<T, float>) {
+            if constexpr (std::is_same_v<T, float>){
+
                 for (size_t j = 0; j < inner_dim; j += 8) {
                     const __m256 a_vec = _mm256_setr_ps(
                         j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 1,
@@ -260,7 +259,6 @@ namespace Breeze {
 
         const size_t inner_dim = target_shape.back();
 
-        #pragma omp parallel for
         for (size_t i = 0; i < outer_dim; ++i) {
             std::vector<size_t> coords(target_shape.size() - 1);
             size_t temp = i;
@@ -281,7 +279,7 @@ namespace Breeze {
 
     #if defined(__x86_64__) || defined(_M_X64)
             // x86/AVX2
-            if constexpr (std::is_same_v<T, float>) {
+            if constexpr (std::is_same_v<T, float>){
                 for (size_t j = 0; j < inner_dim; j += 8) {
                     const __m256 a_vec = _mm256_setr_ps(
                         j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 0,
@@ -310,7 +308,7 @@ namespace Breeze {
                     _mm256_storeu_ps(result_data + result_offset + j, result_vec);
                 }
 
-            } else if constexpr (std::is_same_v<T, double>) {
+            } else if constexpr (std::is_same_v<T, double>){
                 for (size_t j = 0; j < inner_dim; j += 4) {
                     const __m256d a_vec = _mm256_setr_pd(
                         j + 0 < inner_dim ? a_data[a_offset + (j + 0) * a_inc] : 0,
@@ -416,9 +414,6 @@ namespace Breeze {
         const auto& a_steps = a.get_steps();
         const auto& b_steps = b.get_steps();
 
-        // Parallelize using OpenMP
-
-        #pragma omp parallel for
         for (size_t idx = 0; idx < num_matrices; ++idx) {
             std::vector<size_t> coords(depth);
             size_t temp = idx;
@@ -476,13 +471,12 @@ namespace Breeze {
     }
 
     template<typename T>
-    std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<size_t>>
+    std::tuple<std::vector<int32_t>, std::vector<int32_t>, std::vector<size_t>>
     CPUTensorOps<T>::calc_broadcast_shape(const std::vector<size_t>& shape1, const std::vector<size_t>& shape2,const bool matmul) const {
         // 计算目标形状
         std::vector<size_t> targetShape;
         const int maxDims = static_cast<int>(std::max(shape1.size(), shape2.size()));
         targetShape.resize(maxDims);
-
         if (matmul) {
             // 特殊处理矩阵乘法的情况
             if (shape1.size() < 2 || shape2.size() < 2) {
@@ -503,7 +497,6 @@ namespace Breeze {
             targetShape[maxDims - 2] = shape1[shape1.size() - 2];
             targetShape[maxDims - 1] = shape2[shape2.size() - 1];
         } else {
-            // 原始的广播逻辑
             for (int i = 0; i < maxDims; ++i) {
                 const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
                 const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
@@ -515,16 +508,16 @@ namespace Breeze {
         }
 
         // 计算输入向量的步长
-        std::vector<int64_t> strides1(maxDims, 0), strides2(maxDims, 0);
-        int64_t stride1 = 1, stride2 = 1;
+        std::vector<int32_t> strides1(maxDims, 0), strides2(maxDims, 0);
+        int32_t stride1 = 1, stride2 = 1;
         // 矩阵乘法的步长计算
         for (int i = static_cast<int>(shape1.size()) - 1; i >= 0; --i) {
             strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride1;
-            stride1 *= static_cast<int64_t>(shape1[i]);
+            stride1 *= static_cast<int32_t>(shape1[i]);
         }
         for (int i = static_cast<int>(shape2.size()) - 1; i >= 0; --i) {
             strides2[maxDims - shape2.size() + i] = shape2[i] == 1 ? 0 : stride2;
-            stride2 *= static_cast<int64_t>(shape2[i]);
+            stride2 *= static_cast<int32_t>(shape2[i]);
         }
 
         return {strides1, strides2, targetShape};

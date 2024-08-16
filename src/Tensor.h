@@ -32,14 +32,15 @@ public:
 
 
     virtual void resize(const Shape& new_shape) = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int64_t, int64_t>>& ranges) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int64_t, int64_t, int64_t>>& ranges) const  = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const  = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> view(std::vector<size_t>&& new_shape) const = 0;
     virtual void expand(const Shape&& new_shape) = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
     [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
+    virtual void set_value(const std::vector<size_t>& indices,T value) = 0;
 
     [[nodiscard]] virtual size_t size() const;
     virtual void to_cpu() = 0;
@@ -54,8 +55,9 @@ public:
     [[nodiscard]] Device get_device() const;
     [[nodiscard]] virtual std::vector<size_t> get_strides() const = 0;
 
-    [[nodiscard]] virtual std::vector<int64_t> get_steps() const = 0;
+    [[nodiscard]] virtual std::vector<int32_t> get_steps() const = 0;
     [[nodiscard]] size_t num_elements() const;
+private:
 
     friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
         tensor.print(os);

@@ -3,7 +3,7 @@
 #include "node.h"
 #include "CPUTensor.h"
 #include "common/Macro.h"
-
+#include <omp.h>
 using namespace Breeze;
 int main() {
     // 创建节点并初始化值为矩阵
@@ -29,7 +29,7 @@ int main() {
 
     CPUTensor<float> tensor2({3, 2, 1, 7});
     tensor2.fill(1.7);
-
+    // MEASURE_TIME(tensor1_s->matmul(tensor2));
 
     CPUTensor<float> tensor3({2, 1, 8});
     tensor3.fill(4.0);
@@ -37,14 +37,15 @@ int main() {
     CPUTensor<float> tensor4({2, 3, 1});
     tensor4.fill(3.0);
 
-    // MEASURE_TIME(tensor1.matmul(tensor2););
+
+
+    // MEASURE_TIME(tensor1_s->matmul(tensor2));
     const auto r1 = tensor1_s->matmul(tensor2);
     std::cout << *r1 << std::endl;
 
     const auto r2 = tensor3 + tensor4;
     std::cout << *r2 << std::endl;
-
-
+    MEASURE_TIME(auto r21 = tensor3 * tensor4;);
     const auto r3 = tensor3 * tensor4;
 
     auto r5 = *r2 + *r3;
@@ -70,6 +71,30 @@ int main() {
     tensor7.expand({3,4});
     std::cout << tensor7 << std::endl;
 
+    MEASURE_TIME(auto t2 = CPUTensor<float>::arrange(1,10,2));
+
+    CPUTensor<float> tensor8(Shape{3, 2, 2, 6, 1});
+    tensor8.fill(4.0);
+    tensor8.expand(Shape{3, 2, 2, 6, 4});
+
+    // 2 2 4 4
+    auto s_tensor8 = tensor8.slice({KEEP,S_(1,2),S_(1,2),S_(2,6),S_(2,6)});
+    s_tensor8->fill(1.5);
+
+    CPUTensor<float> tensor9(Shape{3, 1, 1, 4, 2});
+    tensor9.fill(2.0);
+    CPUTensor<float> tensor10(Shape{3, 2, 1, 4, 2});
+    tensor10.fill(3.0);
+
+    std::cout << tensor8 << std::endl;
+    std::cout << "tensor8 是否连续" << tensor8.is_contiguous()  << std::endl;
+    std::cout << "切片 s_tensor8 是否连续" << s_tensor8->is_contiguous() << std::endl;
+    //不连续拼接
+    auto t4 = CPUTensor<float>::cat({dynamic_cast<CPUTensor<float>*>(s_tensor8.get()), &tensor9},2);
+    //连续拼接
+    MEASURE_TIME(auto t5 = CPUTensor<float>::cat({&tensor9, &tensor10},1));
+    std::cout << *t4 << std::endl;
+    // std::cout << *t5 << std::endl;
     // MEASURE_TIME(const auto r1 = tensor3 * tensor4; );
     // MEASURE_TIME(const auto r_2 = tensor3 + tensor4; );
     // MEASURE_TIME(const auto r4 = tensor3 / tensor4; );
