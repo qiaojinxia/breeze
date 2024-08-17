@@ -92,17 +92,9 @@ namespace Breeze {
 
     class Shape {
     public:
-        explicit Shape(const std::vector<size_t>& dims) : dims_(dims) {
-            if (dims.empty()) {
-                throw std::invalid_argument("Dimensions cannot be empty");
-            }
-        }
+        explicit Shape(const std::vector<size_t>& dims) : dims_(dims) {}
 
-        Shape(const std::initializer_list<size_t> dims) : dims_(dims) {
-            if (dims.size() == 0) {
-                throw std::invalid_argument("Dimensions cannot be empty");
-            }
-        }
+        Shape(const std::initializer_list<size_t> dims) : dims_(dims) {}
 
         [[nodiscard]] size_t dim(const size_t axis) const {
             if (axis >= dims_.size()) {
@@ -116,6 +108,9 @@ namespace Breeze {
         }
 
         [[nodiscard]] size_t total_size() const {
+            //标空为量 也返回 1 个
+            if (dims_.empty())
+                return 1;
             return std::accumulate(dims_.begin(), dims_.end(), 1ULL, std::multiplies<>());
         }
 
@@ -123,17 +118,20 @@ namespace Breeze {
             return dims_;
         }
 
-        [[nodiscard]] Shape reshape(const std::vector<size_t>& new_dims) const {
-            if (const size_t new_total_size =
-                std::accumulate(new_dims.begin(), new_dims.end(), 1ULL, std::multiplies<>());
-                new_total_size != total_size()) {
-                throw std::invalid_argument("New shape must have the same total size");
-            }
-            return Shape(new_dims);
-        }
-
         [[nodiscard]] std::vector<size_t> strides() const {
             return Utils::compute_strides(this->dims());
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, const Shape& shape) {
+            os << '(';
+            for (size_t i = 0; i < shape.dims_.size(); ++i) {
+                os << shape.dims_[i];
+                if (i != shape.dims_.size() - 1) {
+                    os << ", ";
+                }
+            }
+            os << ')';
+            return os;
         }
 
         bool operator==(const Shape& other) const {

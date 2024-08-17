@@ -12,6 +12,8 @@ namespace Breeze {
     public:
         explicit CPUTensor(const Shape& _shape);
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
+            const std::vector<size_t>&& shape_size);
+        CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
             const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps);
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
             const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps, std::vector<size_t>&& strides);
@@ -26,17 +28,15 @@ namespace Breeze {
 
         std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& rhs) const override;
 
-        void resize(const Shape& new_shape) override;
+
         [[nodiscard]] std::shared_ptr<Tensor<T>> reshape(const std::vector<int32_t>& new_shape) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::pair<int32_t, int32_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> view(const std::vector<int32_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> unsqueeze(int32_t dim) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> squeeze(int32_t dim) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> expand(const std::vector<int32_t>& new_shape) const override;
 
-        void expand(const Shape&& new_shape) override;
-
-        static std::shared_ptr<CPUTensor> cat(const std::vector<CPUTensor*>& tensors, int32_t dim);
+        static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<T>*>& tensors, int32_t dim);
 
         T* data() override;
         const T* data() const override;
@@ -64,7 +64,7 @@ namespace Breeze {
 
         static std::shared_ptr<CPUTensor> arrange(T  begin,T end,T step);
     private:
-        std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block;
+        std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block_;
         size_t offset_ = 0;
         std::vector<int32_t> steps_;
         std::vector<size_t> strides_;

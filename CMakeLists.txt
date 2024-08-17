@@ -32,10 +32,25 @@ if(OpenMP_CXX_FOUND)
     set(OpenMP_CXX_LIB_NAMES "omp")
     set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
 else()
-    # OpenMP 没有找到，手动设置（注意：路径可能需要根据您的系统进行调整）
-    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/Cellar/libomp/18.1.8/include")
-    set(OpenMP_CXX_LIB_NAMES "omp")
-    set(OpenMP_omp_LIBRARY "/usr/local/Cellar/libomp/18.1.8/lib/libomp.dylib")
+    if(APPLE)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+            # Apple Silicon (M1, M2, etc.)
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+            # Intel-based Mac
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/Cellar/libomp/18.1.8/include")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY "/usr/local/Cellar/libomp/18.1.8/lib/libomp.dylib")
+        endif()
+    else()
+        # For other platforms, you may need to adjust these settings
+        set(OpenMP_CXX_FLAGS "-fopenmp")
+        set(OpenMP_CXX_LIB_NAMES "gomp")
+        find_library(OpenMP_gomp_LIBRARY NAMES gomp)
+        set(OpenMP_omp_LIBRARY ${OpenMP_gomp_LIBRARY})
+    endif()
 endif()
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
@@ -47,6 +62,7 @@ set(SOURCES
         src/CPUTensorOps.cpp
         src/CPUTensor.cpp
         src/common/Utils.h
+        src/tests/test_cases.h
 )
 
 # 定义头文件（可选）
@@ -69,9 +85,7 @@ add_executable(breeze ${SOURCES})
 target_compile_definitions(breeze PRIVATE
         ACCELERATE_NEW_LAPACK
         ACCELERATE_LAPACK_ILP64
-
 )
-target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} "-mavx" )
 
 # 设置包含目录
 target_include_directories(breeze PRIVATE

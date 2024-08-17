@@ -13,33 +13,33 @@ namespace Breeze {
     template<typename T>
     CPUTensor<T>::CPUTensor(const Shape& _shape)
     : Tensor<T>(_shape, Device::CPU, new CPUTensorOps<T>()),
-      memory_block(std::make_shared<TensorStorage<T, CPUDevice>>(_shape.total_size())) {
-        const std::vector<int32_t> steps(_shape.ndim(), 1);
-        steps_ = steps;
-    }
+        memory_block_(std::make_shared<TensorStorage<T, CPUDevice>>(_shape.total_size())),
+        steps_(std::vector<int32_t>(_shape.ndim(), 1)) {}
 
     template<typename T>
-        CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
-            const size_t offset, const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps)
-            : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
-            memory_block(data),offset_(offset),
-            steps_(std::move(steps)){
-        auto strides = Shape(shape_size).strides();
-        this->strides_ = strides;
-    }
+    CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
+        const size_t offset, const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps)
+    : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
+    memory_block_(data),offset_(offset),steps_(std::move(steps)){}
+
+    template<typename T>
+    CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
+        const size_t offset,const std::vector<size_t>&& shape_size)
+    : Tensor<T>(Shape(shape_size), Device::CPU, new CPUTensorOps<T>()),
+    memory_block_(data),offset_(offset),steps_( std::vector<int32_t>(shape_size.size(), 1)){}
 
     template<typename T>
         CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
             const size_t offset, const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps, std::vector<size_t>&& strides)
             : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
-            memory_block(data),offset_(offset),
+            memory_block_(data),offset_(offset),
             steps_(std::move(steps)),strides_(std::move(strides)){
     }
 
     template<typename T>
       CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, const std::vector<size_t>&& shape_size)
           : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
-          memory_block(data){
+          memory_block_(data){
         const std::vector<int32_t> steps(shape_size.size(),1);
         steps_ = steps;
     }
@@ -106,13 +106,22 @@ namespace Breeze {
             if (this->size() % new_size != 0) {
                 throw std::invalid_argument("New shape is not compatible with the number of elements");
             }
-            actual_new_shape[dynamic_dim] = this->size() / new_size;
+            actual_new_shape[dynamic_dim] = static_cast<int32_t>(this->size() / new_size);
             new_size = this->size();
         }
 
         // 检查新旧大小是否匹配
         if (new_size != this->size()) {
             throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
+        }
+
+        // 处理标量的特殊情况
+        if (this->shape.ndim() == 0 || actual_new_shape.empty()) {
+            if (this->size() != 1) {
+                throw std::invalid_argument("Can only reshape scalar to scalar or scalar to 1-element tensor");
+            }
+            return std::make_shared<CPUTensor>(memory_block_, offset_,
+                std::move(std::vector<size_t>(actual_new_shape.begin(), actual_new_shape.end())));
         }
 
         // 如果张量是连续的，使用 view
@@ -123,26 +132,17 @@ namespace Breeze {
         // 如果张量不是连续的，先 clone 再 view
         auto cloned = this->clone();
         return cloned->view(std::move(actual_new_shape));
-
     }
 
-    template<typename T>
-    void CPUTensor<T>::resize(const Shape& new_shape) {
-        if (new_shape.total_size() != this->shape.total_size()) {
-            throw std::invalid_argument("New shape must have the same total size");
-        }
-        this->shape = new_shape;
-        memory_block = std::make_shared<TensorStorage<T, CPUDevice>>(new_shape.total_size());
-    }
 
     template<typename T>
     T* CPUTensor<T>::data() {
-        return memory_block->getData();
+        return memory_block_->getData();
     }
 
     template<typename T>
     const T* CPUTensor<T>::data() const {
-        return memory_block->getData();
+        return memory_block_->getData();
     }
 
     template<typename T>
@@ -176,7 +176,7 @@ namespace Breeze {
             }
 
             // 填充当前位置
-            memory_block->getData()[offset] = value_func(indices);
+            memory_block_->getData()[offset] = value_func(indices);
 
             // 更新索引
             for (int32_t dim = static_cast<int32_t>(indices.size()) - 1; dim >= 0; --dim) {
@@ -190,30 +190,32 @@ namespace Breeze {
 
     template <typename T>
     bool CPUTensor<T>::is_contiguous() const {
-            // 检查是否所有的步长都是1
-            for (const auto& step : steps_) {
-                if (step != 1) return false;
-            }
-
-            // 检查是否内存布局是连续的
-            size_t expected_stride = 1;
-            for (int i = strides_.size() - 1; i >= 0; --i) {
-                if (strides_[i] == 0) {
-                    return false;
-                }
-                if (strides_[i] != expected_stride) return false;
-                expected_stride *= this->get_shape().dims()[i];
-            }
-            return true;
+        // 检查是否所有的步长都是1
+        for (const auto& step : steps_) {
+            if (step != 1) return false;
         }
+        const auto strides = get_strides();
+        // 检查是否内存布局是连续的
+        size_t expected_stride = 1;
+        for (int i = strides.size() - 1; i >= 0; --i) {
+            if (strides[i] == 0) {
+                return false;
+            }
+            if (strides[i] != expected_stride) return false;
+            expected_stride *= this->get_shape().dims()[i];
+        }
+        return true;
+    }
+
 
     template<typename T>
     void CPUTensor<T>::setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape) {
-        memory_block = std::move(new_block);
+        memory_block_ = std::move(new_block);
         const std::vector<int32_t> steps(n_shape.ndim(), 1);
         steps_ = steps;
         this->shape = std::move(n_shape);
     }
+
 
     template<typename T>
     const T& CPUTensor<T>::at(const std::vector<size_t>& indices) const{
@@ -222,8 +224,9 @@ namespace Breeze {
             auto stride = this->get_strides()[i];
             offset += (indices[i] * stride) * steps_[i];
         }
-        return memory_block->getData()[offset];
+        return memory_block_->getData()[offset];
     }
+
 
     template<typename T>
     void CPUTensor<T>::set_value(const std::vector<size_t>& indices,T value){
@@ -232,18 +235,20 @@ namespace Breeze {
             auto stride = this->get_strides()[i];
             offset += (indices[i] * stride) * steps_[i];
         }
-        T* data_ptr = &memory_block->getData()[offset];
+        T* data_ptr = &memory_block_->getData()[offset];
         *data_ptr = value;
     }
+
 
     template<typename T>
     void CPUTensor<T>::print(std::ostream& os) const {
         const auto& shape_ = this->shape.dims();
-        if (shape_.empty()) {
-            os << "Empty tensor" << std::endl;
+        os << "tensor(";
+        if (this->shape.ndim() == 0) {
+            os << this->data()[0];
+            os << ")" << std::endl;
             return;
         }
-
         std::function<void(const std::vector<size_t>&, size_t, const std::string&)> print_recursive;
         print_recursive = [&](const std::vector<size_t>& indices, size_t dim, const std::string& indent) {
             os << "[";
@@ -267,184 +272,192 @@ namespace Breeze {
                 os << "]";
             }
         };
-
         print_recursive({}, 0, "");
-        os << std::endl;
+        os << ")" << std::endl;
     }
 
-    template <typename T>
-    [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::slice(
-    const std::vector<std::pair<int32_t, int32_t>>& ranges) const {
-        std::vector<std::tuple<int32_t, int32_t, int32_t>> full_ranges;
-        full_ranges.reserve(ranges.size());
-        for (const auto& [start, end] : ranges) { // 使用结构化绑定
-            full_ranges.emplace_back(start, end, 1);
-        }
-        return slice(full_ranges);
-    }
 
     template <typename T>
     [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::slice(
         const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const {
 
+        const auto& original_shape = this->get_shape().dims();
+        const auto& original_strides = this->get_strides();
+
+        if (original_shape.empty()) {
+            throw std::invalid_argument("Cannot slice a 0-dimensional tensor");
+        }
+
+        if (ranges.size() > original_shape.size()) {
+            throw std::invalid_argument("Number of slice ranges cannot exceed tensor dimensions");
+        }
+
         std::vector<size_t> new_shape;
         int32_t new_offset = this->offset_;
         std::vector<int32_t> new_steps;
         std::vector<size_t> new_strides;
-        const auto& original_shape = this->get_shape().dims();
-        const auto& original_strides = this->get_strides();
 
         for (size_t i = 0; i < ranges.size(); ++i) {
             const int32_t dim_size = original_shape[i];
             auto [start, end, step] = ranges[i];
 
-            if (start == KEEP_ALL || (start == 0 && end == KEEP_ALL && step == 1)) {
-                new_shape.push_back(dim_size);
-                new_steps.push_back(step);
-                new_strides.push_back(original_strides[i]);
-                continue;
-            }
-
-            if (end == KEEP_REST) {
-                end = dim_size;
-            }
-
-            if (start < 0) start += dim_size;
-            if (end <= 0) end += dim_size;
-            start = std::clamp(start, 0, dim_size);
-            end = std::clamp(end, start, dim_size);
-
             if (step == 0) {
                 throw std::invalid_argument("Slice step cannot be zero");
             }
 
-            if (step < 0) {
-                if (start < end) {
-                    std::swap(start, end);
-                }
-                start = dim_size - 1 - start;
-                end = dim_size - 1 - end;
-                step = -step;
+            // 处理负索引
+            if (start < 0) start += dim_size;
+            if (end <= 0) end += dim_size;
+
+            // 确保 start 和 end 在有效范围内
+            start = std::clamp(start, 0, dim_size - 1);
+            end = std::clamp(end, 0, dim_size);
+
+            size_t new_dim_size;
+            if (step > 0) {
+                new_dim_size = (end > start) ? (end - start + step - 1) / step : 0;
+                new_offset += start * original_strides[i];
+            } else {
+                if (start < end) std::swap(start, end);
+                new_dim_size = (start > end) ? (start - end - step - 1) / (-step) : 0;
+                new_offset += start * original_strides[i];
             }
 
-            if (const size_t new_dim_size = (end - start + step - 1) / step; new_dim_size > 0) {
+            if (new_dim_size > 0) {
                 new_shape.push_back(new_dim_size);
                 new_steps.push_back(step);
-                new_offset += start * original_strides[i];
                 new_strides.push_back(original_strides[i]);
             }
-
         }
 
-        return std::make_shared<CPUTensor>(memory_block, new_offset,
-            std::move(new_shape), std::move(new_steps), std::move(new_strides));
+        // 处理未指定的维度（保持原样）
+        for (size_t i = ranges.size(); i < original_shape.size(); ++i) {
+            new_shape.push_back(original_shape[i]);
+            new_steps.push_back(1);
+            new_strides.push_back(original_strides[i]);
+        }
+
+        return std::make_shared<CPUTensor>(memory_block_, new_offset, std::move(new_shape),
+            std::move(new_steps), std::move(new_strides));
     }
 
 
     template <typename T>
     std::shared_ptr<Tensor<T>> CPUTensor<T>::clone() const {
-            const auto& src_shape = this->shape.dims();
-            const auto ndim = this->shape.ndim();
-            const auto& src_strides = this->get_strides();
-            const auto& src_steps = this->get_steps();
-            const T* src_data = this->data();
+        const auto& src_shape = this->shape.dims();
+        const int32_t ndim = this->shape.ndim();
+        const auto& src_strides = this->get_strides();
+        const auto& src_steps = this->get_steps();
+        const T* src_data = this->data();
 
-            auto dst_tensor = std::make_shared<CPUTensor>(Shape{src_shape});
-            T* dst_data = dst_tensor->data();
-
-            // 快速路径：如果源张量是连续的，直接进行整体复制
-            if (this->is_contiguous()) {
-                std::memcpy(dst_data, src_data + this->offset_, this->size() * sizeof(T));
-                return dst_tensor;
-            }
-
-            // 计算外部循环的维度
-            size_t outer_dim = 1;
-            for (size_t d = 0; d < ndim - 1; ++d) {
-                outer_dim *= src_shape[d];
-            }
-
-            const size_t copy_size = src_shape.back();
-            const size_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
-
-    #pragma omp parallel for if(outer_dim > 1000)
-            for (size_t i = 0; i < outer_dim; ++i) {
-                size_t src_offset = offset_;
-                size_t dst_offset = 0;
-                size_t idx = i;
-
-                for (int32_t j = ndim - 2; j >= 0; --j) {
-                    size_t _idx_ = idx % src_shape[j];
-                    idx /= src_shape[j];
-                    src_offset += _idx_ * src_strides[j] * src_steps[j];
-                    dst_offset += _idx_ * dst_tensor->get_strides()[j];
-                }
-
-                if constexpr (std::is_same_v<T, float>) {
-                    cblas_scopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
-                } else if constexpr (std::is_same_v<T, double>) {
-                    cblas_dcopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
-                } else {
-                    std::copy_n(src_data + src_offset, copy_size, dst_data + dst_offset);
-                }
-            }
-
+        // 处理 0 维度（标量）的情况
+        if (ndim == 0) {
+            auto dst_tensor = std::make_shared<CPUTensor>(Shape{});
+            dst_tensor->data()[0] = src_data[this->offset_];
             return dst_tensor;
         }
 
+        auto dst_tensor = std::make_shared<CPUTensor>(Shape{src_shape});
+        T* dst_data = dst_tensor->data();
+
+        // 快速路径：如果源张量是连续的，直接进行整体复制
+        if (this->is_contiguous()) {
+            std::memcpy(dst_data, src_data + this->offset_, this->size() * sizeof(T));
+            return dst_tensor;
+        }
+
+        // 计算外部循环的维度
+        size_t outer_dim = 1;
+        for (size_t d = 0; d < ndim - 1; ++d) {
+            outer_dim *= src_shape[d];
+        }
+
+        const size_t copy_size = src_shape.back();
+        const size_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
+
+        #pragma omp parallel for if(outer_dim > 1000)
+        for (size_t i = 0; i < outer_dim; ++i) {
+            size_t src_offset = offset_;
+            size_t dst_offset = 0;
+            size_t idx = i;
+
+            for (int32_t j = std::max(ndim - 2, 0); j >= 0; --j) {
+                size_t _idx_ = idx % src_shape[j];
+                idx /= src_shape[j];
+                src_offset += _idx_ * src_strides[j] * src_steps[j];
+                dst_offset += _idx_ * dst_tensor->get_strides()[j];
+            }
+
+            if constexpr (std::is_same_v<T, float>) {
+                cblas_scopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
+            } else if constexpr (std::is_same_v<T, double>) {
+                cblas_dcopy(copy_size, src_data + src_offset, src_stride, dst_data + dst_offset, 1);
+            } else {
+                // 对于其他类型，手动复制以确保正确处理不连续的情况
+                for (size_t j = 0; j < copy_size; ++j) {
+                    dst_data[dst_offset + j] = src_data[src_offset + j * src_stride];
+                }
+            }
+        }
+
+        return dst_tensor;
+    }
+
+
     template <typename T>
     std::shared_ptr<Tensor<T>> CPUTensor<T>::view(const std::vector<int32_t>& new_shape) const {
-            // 检查张量是否连续
-            if (!is_contiguous()) {
-                throw std::runtime_error("Cannot perform view on non-contiguous tensor");
-            }
-
-            // 处理自动计算维度
-            const int32_t total_size = this->get_shape().total_size();
-            int32_t new_total_size = 1;
-            int32_t dynamic_dim = -1;
-
-            for (size_t i = 0; i < new_shape.size(); ++i) {
-                if (new_shape[i] == -1) {
-                    if (dynamic_dim != -1) {
-                        throw std::invalid_argument("Only one dimension can be -1 in view");
-                    }
-                    dynamic_dim = static_cast<int32_t>(i);
-                } else if (new_shape[i] < 0) {
-                    throw std::invalid_argument("Invalid negative dimension in view");
-                } else {
-                    new_total_size *= new_shape[i];
-                }
-            }
-
-            // 计算动态维度
-            std::vector<size_t> final_shape;
-            final_shape.reserve(new_shape.size());
-
-            if (dynamic_dim != -1) {
-                if (total_size % new_total_size != 0) {
-                    throw std::invalid_argument("New shape is not compatible with the number of elements");
-                }
-                for (size_t i = 0; i < new_shape.size(); ++i) {
-                    if (i == dynamic_dim) {
-                        final_shape.push_back(total_size / new_total_size);
-                    } else {
-                        final_shape.push_back(new_shape[i]);
-                    }
-                }
-            } else {
-                // 检查新形状是否合法
-                if (new_total_size != total_size) {
-                    throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
-                }
-                for (const auto& dim : new_shape) {
-                    final_shape.push_back(dim);
-                }
-            }
-
-            // 返回新的张量视图
-            return std::make_shared<CPUTensor>(memory_block, std::move(final_shape));
+        // 检查张量是否连续
+        if (!is_contiguous()) {
+            throw std::runtime_error("Cannot perform view on non-contiguous tensor");
         }
+
+        const int32_t total_size = this->get_shape().total_size();
+
+        // 处理自动计算维度
+        int32_t new_total_size = 1;
+        int32_t dynamic_dim = -1;
+
+        for (size_t i = 0; i < new_shape.size(); ++i) {
+            if (new_shape[i] == -1) {
+                if (dynamic_dim != -1) {
+                    throw std::invalid_argument("Only one dimension can be -1 in view");
+                }
+                dynamic_dim = static_cast<int32_t>(i);
+            } else if (new_shape[i] < 0) {
+                throw std::invalid_argument("Invalid negative dimension in view");
+            } else {
+                new_total_size *= new_shape[i];
+            }
+        }
+
+        // 计算动态维度和最终形状
+        std::vector<size_t> final_shape;
+        final_shape.reserve(new_shape.size());
+
+        if (dynamic_dim != -1) {
+            if (total_size % new_total_size != 0) {
+                throw std::invalid_argument("New shape is not compatible with the number of elements");
+            }
+            for (size_t i = 0; i < new_shape.size(); ++i) {
+                if (i == dynamic_dim) {
+                    final_shape.push_back(total_size / new_total_size);
+                } else {
+                    final_shape.push_back(new_shape[i]);
+                }
+            }
+        } else {
+            // 检查新形状是否合法
+            if (new_total_size != total_size) {
+                throw std::invalid_argument("New shape must have the same number of elements as the original tensor");
+            }
+            for (const auto& dim : new_shape) {
+                final_shape.push_back(dim);
+            }
+        }
+
+        // 返回新的张量视图，保持原始偏移
+        return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(final_shape));
+    }
 
 
     template<typename T>
@@ -478,15 +491,14 @@ namespace Breeze {
             }
         }
 
-
         new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
 
-        return std::make_shared<CPUTensor<T>>(this->memory_block, this->offset_,
+        return std::make_shared<CPUTensor>(memory_block_, this->offset_,
            std::move(new_shape), std::move(new_steps), std::move(new_strides));
     }
 
     template<typename T>
- std::shared_ptr<Tensor<T>> CPUTensor<T>::squeeze(const int32_t dim) const {
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::squeeze(const int32_t dim) const {
         const auto& original_shape = this->get_shape().dims();
         const auto& original_strides = this->get_strides();
         const auto& original_steps = this->get_steps();
@@ -510,59 +522,67 @@ namespace Breeze {
             }
         }
 
-        // 如果所有维度都被移除，保留一个维度
-        if (new_shape.empty()) {
-            new_shape.push_back(1);
-            new_strides.push_back(1);
-            new_steps.push_back(1);
-        }
-
         // 使用新函数重新计算strides
         new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
 
-        return std::make_shared<CPUTensor>(this->memory_block, this->offset_,
+        return std::make_shared<CPUTensor>(memory_block_, this->offset_,
             std::move(new_shape), std::move(new_steps), std::move(new_strides));
     }
 
     template <typename T>
-    void CPUTensor<T>::expand(const Shape&& new_shape)  {
-        const auto& current_shape = this->shape.dims();
-        const auto& new_dims = new_shape.dims();
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::expand(const std::vector<int32_t>& new_shape) const {
+        const auto& current_shape = this->get_shape().dims();
+        std::vector<size_t> actual_new_shape(new_shape.size());
+        std::vector<int32_t> new_steps(new_shape.size());
+        std::vector<size_t> new_strides(new_shape.size());
 
-        // 检查新形状是否兼容
-        if (new_dims.size() < current_shape.size()) {
-            throw std::invalid_argument("New shape must have at least as many dimensions as the current shape");
-        }
+        // 处理 0 维度（空张量）或 1 维度（标量）的情况
+        if (current_shape.empty() || (current_shape.size() == 1 && current_shape[0] == 1)) {
+            for (size_t i = 0; i < new_shape.size(); ++i) {
+                actual_new_shape[i] = (new_shape[i] == -1) ? 1 : new_shape[i];
+                new_steps[i] = 0;
+                new_strides[i] = 0;
+            }
+        } else {
+            size_t accumulated_stride = 1;
+            int32_t current_dim = static_cast<int32_t>(current_shape.size()) - 1;
 
-        std::vector<size_t> new_strides(new_dims.size(), 0);
-        std::vector<int32_t> new_steps(new_dims.size(), 1);
-
-        // 从右到左填充新的 strides 和 steps
-        int32_t current_dim = current_shape.size() - 1;
-        for (int32_t i = static_cast<int32_t>(new_dims.size()) - 1; i >= 0; --i) {
-            if (current_dim >= 0) {
-                if (new_dims[i] == current_shape[current_dim]) {
-                    new_strides[i] = this->get_strides()[current_dim];
-                    --current_dim;
-                } else if (current_shape[current_dim] == 1) {
-                    new_strides[i] = 0;  // 广播维度的 stride 为 0
+            for (int32_t i = static_cast<int32_t>(new_shape.size()) - 1; i >= 0; --i) {
+                if (current_dim >= 0) {
+                    if (new_shape[i] == -1) {
+                        actual_new_shape[i] = current_shape[current_dim];
+                    } else {
+                        if (new_shape[i] % current_shape[current_dim] != 0 && new_shape[i] != current_shape[current_dim]) {
+                            throw std::invalid_argument("Invalid expansion: new dimension must be divisible by or equal to the current dimension");
+                        }
+                        actual_new_shape[i] = new_shape[i];
+                    }
+                    new_steps[i] = steps_[current_dim];
+                    if (current_shape[current_dim] == 1) {
+                        new_strides[i] = 0;
+                    }else {
+                        new_strides[i] = accumulated_stride;
+                        accumulated_stride *= actual_new_shape[i];
+                    }
                     --current_dim;
                 } else {
-                    throw std::invalid_argument("Incompatible shapes for expansion");
+                    actual_new_shape[i] = (new_shape[i] == -1) ? 1 : new_shape[i];
+                    new_steps[i] = 0;
+                    new_strides[i] = 0;
                 }
-            } else {
-                new_strides[i] = 0;  // 新增维度的 stride 为 0
+
+            }
+
+            if (current_dim >= 0) {
+                throw std::invalid_argument("Invalid expansion: not all current dimensions were used");
             }
         }
-        if (current_dim >= 0) {
-            throw std::invalid_argument("Incompatible shapes for expansion");
-        }
-        this->shape = new_shape;
-        this->strides_ = new_strides;
-    }
 
+        return std::make_shared<CPUTensor>(memory_block_, this->offset_,
+            std::move(actual_new_shape), std::move(new_steps), std::move(new_strides));
+    }
     template <typename T>
-    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(T  begin,T end,T step ) {
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(const T  begin,const T end,const T step ) {
         const auto m_size = static_cast<size_t>((end - begin + 1) /  step);
         auto tensor = std::make_shared<CPUTensor>(Shape{std::vector{m_size}});
         for(size_t i = 0; i< tensor->get_shape().total_size(); ++i) {
@@ -573,25 +593,19 @@ namespace Breeze {
     }
 
     template <typename T>
-    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::cat(const std::vector<CPUTensor*>& tensors, int32_t dim) {
-        if (tensors.empty()) {
-            throw std::invalid_argument("No tensors provided for concatenation");
-        }
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::cat(const std::vector<Tensor<T>*>& tensors, int32_t dim) {
+        if (tensors.empty()) {throw std::invalid_argument("No tensors provided for concatenation");}
 
         int32_t ndim = tensors[0]->get_shape().ndim();
-        for (const auto& tensor : tensors) {
-            if (tensor->get_shape().ndim() != ndim) {
-                throw std::invalid_argument("All tensors must have the same number of dimensions");
-            }
+        for (int32_t i = 0; i< tensors.size(); ++i) {
+            const auto& tensor = tensors[i];
+            // 标量没法拼接
+            if (tensor->get_shape().ndim() == 0) {throw std::invalid_argument(Utils::Format("zero-dimensional tensor (at position %d) cannot be concatenated", i));}
+            if (tensor->get_shape().ndim() != ndim) {throw std::invalid_argument("All tensors must have the same number of dimensions");}
         }
 
-        if (dim < 0) {
-            dim += ndim;
-        }
-
-        if (dim < 0 || dim >= ndim) {
-            throw std::invalid_argument("Invalid dimension for concatenation");
-        }
+        if (dim < 0) {dim += ndim;}
+        if (dim < 0 || dim >= ndim) {throw std::invalid_argument("Invalid dimension for concatenation");}
 
         std::vector<size_t> new_shape = tensors[0]->get_shape().dims();
         size_t concat_dim_size = 0;
@@ -615,7 +629,7 @@ namespace Breeze {
         }
 
         // 最后一维的大小
-        const size_t last_dim_size = new_shape[ndim - 1];
+        const size_t last_dim_size = ndim == 1 ?  1 : new_shape[ndim - 1];
 
         // 计算外层循环的次数和步长
         std::vector<size_t> outer_steps(dim);
@@ -628,15 +642,13 @@ namespace Breeze {
         size_t result_offset = 0;
         for (size_t i = 0; i < outer_iterations; ++i) {
             for (const auto& tensor : tensors) {
+                size_t src_offset = static_cast<CPUTensor*>(tensor)->offset_;
                 const T* src_data = tensor->data();
                 const std::vector<size_t>& src_shape = tensor->get_shape().dims();
                 const std::vector<size_t>& src_strides = tensor->get_strides();
                 const std::vector<int32_t>& src_steps = tensor->get_steps();
-
                 const size_t src_dim_size = src_shape[dim];
 
-                // 计算源张量的起始偏移，考虑所有外层维度
-                size_t src_offset = tensor->offset_;
                 for (int d = 0; d < dim; ++d) {
                     const size_t idx = (i / outer_steps[d]) % new_shape[d];
                     src_offset += idx * src_strides[d] * src_steps[d];
@@ -644,21 +656,15 @@ namespace Breeze {
 
                 if (tensor->is_contiguous() && result->is_contiguous()) {
                     // 使用 BLAS 进行连续内存的复制
-                    size_t copy_size = src_dim_size * block_size * last_dim_size;
-                    if constexpr (std::is_same_v<T, float>) {
-                        cblas_scopy(copy_size, src_data + src_offset, 1, result_data + result_offset, 1);
-                    } else if constexpr (std::is_same_v<T, double>) {
-                        cblas_dcopy(copy_size, src_data + src_offset, 1, result_data + result_offset, 1);
-                    } else {
-                        std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(T));
-                    }
+                    const size_t copy_size = src_dim_size * block_size * last_dim_size;
+                    std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(T));
                     result_offset += copy_size;
                 } else {
                     // 对于非连续存储，我们使用 BLAS 复制最后一维
                     for (size_t j = 0; j < src_dim_size * block_size; ++j) {
                         size_t current_src_offset = src_offset,dst_offset = result_offset;
                         auto idx = j;
-                        for (int d = ndim - 2; d >= dim; --d) {
+                        for (int d = std::max(ndim - 2,0); d >= dim; --d) {
                             size_t coord = idx % src_shape[d];
                             idx /= src_shape[d];
                             current_src_offset += coord * src_strides[d] * src_steps[d];
