@@ -11,6 +11,7 @@ namespace Breeze {
     class CPUTensor final: public Tensor<T> {
     public:
         explicit CPUTensor(const Shape& _shape);
+        CPUTensor(const Shape& _shape, T value);
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
             const std::vector<size_t>&& shape_size);
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
@@ -57,8 +58,6 @@ namespace Breeze {
         void fill(const std::function<T(const std::vector<size_t>&)>& value_func) override;
 
         [[nodiscard]] std::vector<int32_t> get_steps() const override;
-
-        void setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape);
 
         [[nodiscard]] std::vector<size_t> get_strides() const override;
 

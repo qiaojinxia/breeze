@@ -17,6 +17,14 @@ namespace Breeze {
         steps_(std::vector<int32_t>(_shape.ndim(), 1)) {}
 
     template<typename T>
+    CPUTensor<T>::CPUTensor(const Shape& _shape,const T value)
+    : Tensor<T>(_shape, Device::CPU, new CPUTensorOps<T>()),
+        memory_block_(std::make_shared<TensorStorage<T, CPUDevice>>(_shape.total_size())),
+        steps_(std::vector<int32_t>(_shape.ndim(), 1)) {
+        fill(value);
+    }
+
+    template<typename T>
     CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
         const size_t offset, const std::vector<size_t>&& shape_size, std::vector<int32_t>&& steps)
     : Tensor<T>(Shape(shape_size), Device::CPU,new CPUTensorOps<T>()),
@@ -103,8 +111,8 @@ namespace Breeze {
         // 处理动态维度
         std::vector<int32_t> actual_new_shape = new_shape;
         if (dynamic_dim != -1) {
-            if (this->size() % new_size != 0) {
-                throw std::invalid_argument("New shape is not compatible with the number of elements");
+            if (this->get_shape().total_size() % new_size != 0) {
+                throw std::invalid_argument(Utils::Format("New shape is not compatible with the number(%d) of elements", new_size));
             }
             actual_new_shape[dynamic_dim] = static_cast<int32_t>(this->size() / new_size);
             new_size = this->size();
@@ -170,14 +178,13 @@ namespace Breeze {
 
         for (size_t i = 0; i < total_elements; ++i) {
             // 计算偏移量
-            size_t offset = offset_;
+            int32_t offset = offset_;
             for (int32_t j = 0; j < indices.size(); ++j) {
                 offset += indices[j] * strides[j] * steps_[j];
             }
 
             // 填充当前位置
             memory_block_->getData()[offset] = value_func(indices);
-
             // 更新索引
             for (int32_t dim = static_cast<int32_t>(indices.size()) - 1; dim >= 0; --dim) {
                 if (++indices[dim] < dims[dim]) {
@@ -207,38 +214,26 @@ namespace Breeze {
         return true;
     }
 
-
-    template<typename T>
-    void CPUTensor<T>::setTensorStorage(std::shared_ptr<TensorStorage<T, CPUDevice>> new_block,Shape&& n_shape) {
-        memory_block_ = std::move(new_block);
-        const std::vector<int32_t> steps(n_shape.ndim(), 1);
-        steps_ = steps;
-        this->shape = std::move(n_shape);
-    }
-
-
     template<typename T>
     const T& CPUTensor<T>::at(const std::vector<size_t>& indices) const{
-        size_t offset = offset_;
+        int32_t offset = offset_;
+        auto strides = this->get_strides();
         for (int32_t i = 0; i < indices.size(); ++i) {
-            auto stride = this->get_strides()[i];
-            offset += (indices[i] * stride) * steps_[i];
+            offset += indices[i] * strides[i] * steps_[i];
         }
         return memory_block_->getData()[offset];
     }
 
-
     template<typename T>
     void CPUTensor<T>::set_value(const std::vector<size_t>& indices,T value){
-        size_t offset = offset_;
+        int32_t offset = offset_;
         for (int32_t i = 0; i < indices.size(); ++i) {
             auto stride = this->get_strides()[i];
-            offset += (indices[i] * stride) * steps_[i];
+            offset += indices[i] * stride * steps_[i];
         }
         T* data_ptr = &memory_block_->getData()[offset];
         *data_ptr = value;
     }
-
 
     template<typename T>
     void CPUTensor<T>::print(std::ostream& os) const {
@@ -276,7 +271,6 @@ namespace Breeze {
         os << ")" << std::endl;
     }
 
-
     template <typename T>
     [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::slice(
         const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const {
@@ -312,15 +306,16 @@ namespace Breeze {
             // 确保 start 和 end 在有效范围内
             start = std::clamp(start, 0, dim_size - 1);
             end = std::clamp(end, 0, dim_size);
-
+            //左闭右开
+            --end;
             size_t new_dim_size;
             if (step > 0) {
-                new_dim_size = (end > start) ? (end - start + step - 1) / step : 0;
+                new_dim_size = end > start ? (end - start ) / step + 1: 0;
                 new_offset += start * original_strides[i];
             } else {
                 if (start < end) std::swap(start, end);
-                new_dim_size = (start > end) ? (start - end - step - 1) / (-step) : 0;
-                new_offset += start * original_strides[i];
+                new_dim_size = (start > end) ? (start - end ) / -step + 1: 0;
+                new_offset += end * original_strides[i];
             }
 
             if (new_dim_size > 0) {
@@ -359,6 +354,7 @@ namespace Breeze {
 
         auto dst_tensor = std::make_shared<CPUTensor>(Shape{src_shape});
         T* dst_data = dst_tensor->data();
+        const auto& dst_strides = dst_tensor->get_steps();
 
         // 快速路径：如果源张量是连续的，直接进行整体复制
         if (this->is_contiguous()) {
@@ -373,19 +369,19 @@ namespace Breeze {
         }
 
         const size_t copy_size = src_shape.back();
-        const size_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
+        const int32_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
 
         #pragma omp parallel for if(outer_dim > 1000)
         for (size_t i = 0; i < outer_dim; ++i) {
-            size_t src_offset = offset_;
-            size_t dst_offset = 0;
+            int32_t src_offset = offset_;
+            int32_t dst_offset = 0;
             size_t idx = i;
 
             for (int32_t j = std::max(ndim - 2, 0); j >= 0; --j) {
                 size_t _idx_ = idx % src_shape[j];
                 idx /= src_shape[j];
                 src_offset += _idx_ * src_strides[j] * src_steps[j];
-                dst_offset += _idx_ * dst_tensor->get_strides()[j];
+                dst_offset += _idx_ * dst_strides[j];
             }
 
             if constexpr (std::is_same_v<T, float>) {
@@ -581,10 +577,11 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_,
             std::move(actual_new_shape), std::move(new_steps), std::move(new_strides));
     }
+
     template <typename T>
     std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(const T  begin,const T end,const T step ) {
-        const auto m_size = static_cast<size_t>((end - begin + 1) /  step);
-        auto tensor = std::make_shared<CPUTensor>(Shape{std::vector{m_size}});
+        const auto m_size = static_cast<size_t>((end - begin) /  step);
+        auto tensor = std::make_shared<CPUTensor>(Shape{m_size});
         for(size_t i = 0; i< tensor->get_shape().total_size(); ++i) {
             auto data_ptr = tensor->data() + i;
             *data_ptr = begin + i * step;
@@ -639,10 +636,10 @@ namespace Breeze {
             outer_iterations *= new_shape[i];
         }
 
-        size_t result_offset = 0;
+        int32_t result_offset = 0;
         for (size_t i = 0; i < outer_iterations; ++i) {
             for (const auto& tensor : tensors) {
-                size_t src_offset = static_cast<CPUTensor*>(tensor)->offset_;
+                int32_t src_offset = static_cast<CPUTensor*>(tensor)->offset_;
                 const T* src_data = tensor->data();
                 const std::vector<size_t>& src_shape = tensor->get_shape().dims();
                 const std::vector<size_t>& src_strides = tensor->get_strides();
@@ -662,7 +659,7 @@ namespace Breeze {
                 } else {
                     // 对于非连续存储，我们使用 BLAS 复制最后一维
                     for (size_t j = 0; j < src_dim_size * block_size; ++j) {
-                        size_t current_src_offset = src_offset,dst_offset = result_offset;
+                        int32_t current_src_offset = src_offset,dst_offset = result_offset;
                         auto idx = j;
                         for (int d = std::max(ndim - 2,0); d >= dim; --d) {
                             size_t coord = idx % src_shape[d];

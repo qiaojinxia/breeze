@@ -325,8 +325,8 @@ public:
             tensor1d.set_value({static_cast<size_t>(i)}, static_cast<float>(i));
         }
         // Slice to create non-contiguous tensors (e.g., take every other element)
-        const auto sliced_tensor3 = tensor1d.slice({S3_(0, 5, -2)}); // [0, 2]
-        const auto sliced_tensor4 = tensor1d.slice({S3_(1, 6, -2)}); // [1, 3]
+        const auto sliced_tensor3 = tensor1d.slice({S3_(0, 5, -2)}); // [5, 3, 1]
+        const auto sliced_tensor4 = tensor1d.slice({S3_(1, 6, -2)}); // [6, 3, 2]
 
         std::cout << *sliced_tensor3 << std::endl;
         std::cout << *sliced_tensor4 << std::endl;
@@ -344,6 +344,31 @@ public:
     }
 
 
+    static void test_clone() {
+        // 1维度拼接
+        const auto tensor1 = CPUTensor<float>::arrange(0,20,1);
+        std::cout << *tensor1 << std::endl;
+        const auto tensor1_slice = tensor1->slice({S3_(10, 20, -2)});
+        std::cout << *tensor1_slice << std::endl;
+        const auto tensor1_slice_clone = tensor1_slice->clone();
+        std::cout << *tensor1_slice_clone << std::endl;
+        std::cout << "1D non-contiguous tensor clone result: ";
+        assert(tensor1_slice_clone->get_shape().dims() == std::vector<size_t>({5}));
+        std::cout << std::endl;
+
+        // 1维度拼接
+        const auto tensor2 = CPUTensor<float>({20},1.5);
+        std::cout << tensor2 << std::endl;
+        const auto tensor2_slice = tensor2.slice({S3_(10, 20, -2)});
+        std::cout << *tensor2_slice << std::endl;
+        const auto tensor2_slice_clone = tensor2_slice->clone();
+        std::cout << *tensor2_slice_clone << std::endl;
+        std::cout << "1D non-contiguous tensor clone result: ";
+        assert(tensor2_slice_clone->get_shape().dims() == std::vector<size_t>({5}));
+        std::cout << std::endl;
+
+
+    }
     // 运行所有测试
     static void run_all_tests() {
         test_expand();
@@ -351,6 +376,7 @@ public:
         test_unsqueeze();
         test_squeeze();
         test_view();
+        test_clone();
         test_reshape();
         // test_non_contiguous();
         std::cout << "All tests passed!" << std::endl;
