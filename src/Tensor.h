@@ -41,6 +41,7 @@ public:
     virtual T* data() = 0;
     virtual const T* data() const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
+    [[nodiscard]] virtual  std::shared_ptr<Tensor> contiguous() = 0;
     [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
     virtual void set_value(const std::vector<size_t>& indices, T value) = 0;
 
@@ -59,7 +60,7 @@ public:
 
     [[nodiscard]] virtual std::vector<int32_t> get_steps() const = 0;
     [[nodiscard]] size_t num_elements() const;
-
+    [[nodiscard]] virtual size_t n_bytes() const = 0;
 
 private:
     friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {

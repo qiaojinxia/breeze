@@ -4,6 +4,7 @@ project(breeze)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
 find_package(Armadillo REQUIRED)
 
 # 查找 OpenBLAS
@@ -80,11 +81,14 @@ set(HEADERS
 # 添加可执行文件
 add_executable(breeze ${SOURCES})
 
+
 # 添加编译定义
 target_compile_definitions(breeze PRIVATE
         ACCELERATE_NEW_LAPACK
         ACCELERATE_LAPACK_ILP64
 )
+
+target_compile_options(breeze PRIVATE "-Dmavx")
 
 # 设置包含目录
 target_include_directories(breeze PRIVATE

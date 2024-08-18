@@ -8,6 +8,7 @@
 #include <vector>
 #include <cassert>
 #include "../CPUTensor.h"
+#include "../common/Macro.h"
 
 using namespace Breeze;
 class TensorTest {
@@ -415,17 +416,28 @@ public:
         }
     }
 
+    static void test_omp() {
+        // MEASURE_TIME(auto  a1 = CPUTensor<float>::arrange(1,100000000,1.0););
+        const auto a1 = CPUTensor<float>::arrange(1,10000000,1.0)->expand({250,-1})->slice({":","::2"});
+        // MEASURE_TIME(auto x = a1->clone());
+        auto x = a1->clone();
+        const auto data_bytes = x->n_bytes();
+        const double megabytes = static_cast<double>(data_bytes) / (1024.0 * 1024.0);
+        std::cout << Utils::Format("Tensor memory size on CPU (megabytes): {%d} mb",megabytes)  << std::endl;
+    }
+
     // 运行所有测试
     static void run_all_tests() {
-        test_expand();
-        test_cat();
-        test_unsqueeze();
-        test_squeeze();
-        test_view();
-        test_clone();
-        test_reshape();
-        test_non_contiguous();
-        test_transpose();
+        test_omp();
+        // test_expand();
+        // test_cat();
+        // test_unsqueeze();
+        // test_squeeze();
+        // test_view();
+        // test_clone();
+        // test_reshape();
+        // test_non_contiguous();
+        // test_transpose();
         std::cout << "All tests passed!" << std::endl;
     }
 };

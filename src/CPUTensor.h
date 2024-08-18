@@ -5,10 +5,11 @@
 #include "TensorStorage.h"
 #include <cblas.h>
 
+
 namespace Breeze {
 
     template<typename T>
-    class CPUTensor final : public Tensor<T> {
+    class CPUTensor final : public Tensor<T>, public std::enable_shared_from_this<CPUTensor<T>>  {
     public:
         ~CPUTensor() override ;
         explicit CPUTensor(Shape shape);
@@ -44,7 +45,9 @@ namespace Breeze {
 
         T* data() override;
         [[nodiscard]] const T* data() const override;
+
         [[nodiscard]] std::shared_ptr<Tensor<T>> clone() const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> contiguous() override;
 
         [[nodiscard]] const T& at(const std::vector<size_t>& indices) const override;
         void set_value(const std::vector<size_t>& indices, T value) override;
@@ -61,6 +64,7 @@ namespace Breeze {
 
         [[nodiscard]] std::vector<int32_t> get_steps() const override;
         [[nodiscard]] std::vector<size_t> get_strides() const override;
+        [[nodiscard]] size_t n_bytes() const override;
 
         static std::shared_ptr<CPUTensor> arrange(T begin, T end, T step);
         static std::shared_ptr<CPUTensor> scalar();

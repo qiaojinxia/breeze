@@ -66,7 +66,7 @@ namespace Breeze {
         T* getData() { return data; }
         const T* getData() const { return data; }
         [[nodiscard]] size_t getTotalSize() const { return total_size; }
-
+        [[nodiscard]] size_t getTotalBytes() const { return total_size * sizeof(T); }
     private:
         void allocateMemory() {
             constexpr size_t alignment = 64;
@@ -93,7 +93,7 @@ namespace Breeze {
     public:
         explicit Shape(std::vector<size_t> dims) : dims_(std::move(dims)) {}
         Shape(const std::initializer_list<size_t> dims) : dims_(dims) {}
-        Shape() : dims_() {}
+        Shape() : dims_({}) {}
 
         // 禁用复制
         Shape(const Shape&) = delete;

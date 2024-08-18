@@ -1,6 +1,7 @@
 #include "CPUTensor.h"
 #include <stdexcept>
 #include "CPUTensorOps.h"
+#include <memory>
 
 namespace Breeze {
     template<typename T>
@@ -101,6 +102,11 @@ namespace Breeze {
     template<typename T>
     [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::matmul(const Tensor<T>& rhs) const {
         return Tensor<T>::getOps()->matmul(*this, rhs);
+    }
+
+    template<typename T>
+    size_t CPUTensor<T>::n_bytes() const  {
+        return memory_block_->getTotalBytes();
     }
 
     template<typename T>
@@ -383,20 +389,9 @@ namespace Breeze {
         std::vector<size_t> new_strides = this->get_strides();     // 使用复制构造函数
         std::vector<int32_t> new_steps = this->get_steps();      // 使用复制构造函数
 
-        // 处理标量（0维张量）的情况
-        if (ndim == 0) {
+        // 处理标量（0、1维张量）的情况
+        if (ndim == 1 || ndim == 0) {
             return std::make_shared<CPUTensor>(
-                memory_block_,
-                offset_,
-                std::move(new_shape),
-                std::move(new_steps),
-                std::move(new_strides)
-            );
-        }
-
-        // 处理1维张量的情况
-        if (ndim == 1) {
-            return std::make_shared<CPUTensor<T>>(
                 memory_block_,
                 offset_,
                 std::move(new_shape),
@@ -415,8 +410,10 @@ namespace Breeze {
             }
 
         // 即使维度相同，我们也进行交换操作（虽然实际上不会改变任何东西）
-        std::swap(new_shape[adjusted_dim0], new_shape[adjusted_dim1]);
-        std::swap(new_strides[adjusted_dim0], new_strides[adjusted_dim1]);
+        if (adjusted_dim0 != adjusted_dim1) {
+            std::swap(new_shape[adjusted_dim0], new_shape[adjusted_dim1]);
+            std::swap(new_strides[adjusted_dim0], new_strides[adjusted_dim1]);
+        }
 
         // 创建新的 CPUTensor，共享原始数据，但其他属性都是新的
         return std::make_shared<CPUTensor>(
@@ -426,6 +423,16 @@ namespace Breeze {
             std::move(new_steps),
             std::move(new_strides)
         );
+    }
+
+    template <typename T>
+    std::shared_ptr<Tensor<T>> CPUTensor<T>::contiguous(){
+        // 如果已经是连续的，直接返回 this 的 shared_ptr
+        if (this->is_contiguous()) {
+            return this->shared_from_this();
+        }
+        // 如果不是连续的，调用 clone()
+        return this->clone();
     }
 
     template <typename T>
@@ -462,7 +469,7 @@ namespace Breeze {
         const size_t copy_size = src_shape.back();
         const int32_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
 
-        #pragma omp parallel for if(outer_dim > 1000)
+        #pragma omp parallel for if(outer_dim > 1024)
         for (size_t i = 0; i < outer_dim; ++i) {
             int32_t src_offset = offset_;
             int32_t dst_offset = 0;
@@ -673,6 +680,7 @@ namespace Breeze {
     std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(const T  begin,const T end,const T step ) {
         const auto m_size = static_cast<size_t>((end - begin) /  step);
         auto tensor = std::make_shared<CPUTensor>(Shape{m_size});
+        #pragma omp parallel for
         for(size_t i = 0; i< tensor->get_shape().total_size(); ++i) {
             auto data_ptr = tensor->data() + i;
             *data_ptr = begin + i * step;
