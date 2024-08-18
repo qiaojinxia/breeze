@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include "TensorStorage.h"
-#include "TensorOps.h"
+#include "CPUTensorOps.h"
 
 namespace Breeze {
 
@@ -17,10 +17,10 @@ class Tensor {
 protected:
     Device device;
     Shape shape;
-    TensorOps<T> *ops;
-
 public:
-    Tensor(Shape _shape, Device _device,TensorOps<T>* _tensor_op);
+    static const CPUTensorOps<T>* CpuOps;
+    static const TensorOps<T>* getOps();
+    Tensor(Shape _shape, Device _device);
     virtual ~Tensor() = default;
 
     virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
@@ -30,20 +30,19 @@ public:
 
     virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
 
-
-
     [[nodiscard]] virtual std::shared_ptr<Tensor> reshape(const std::vector<int32_t>& new_shape) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::tuple<int32_t, int32_t, int32_t>>& ranges) const  = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::string>& range_strings) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> view(const std::vector<int32_t>& new_shape) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> unsqueeze(int32_t dim) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze(int32_t dim) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> expand(const std::vector<int32_t>& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> transpose(int32_t dim0, int32_t dim1) const = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
     [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
-    virtual void set_value(const std::vector<size_t>& indices,T value) = 0;
+    virtual void set_value(const std::vector<size_t>& indices, T value) = 0;
 
     [[nodiscard]] virtual size_t size() const;
     virtual void to_cpu() = 0;
@@ -60,8 +59,9 @@ public:
 
     [[nodiscard]] virtual std::vector<int32_t> get_steps() const = 0;
     [[nodiscard]] size_t num_elements() const;
-private:
 
+
+private:
     friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
         tensor.print(os);
         return os;
@@ -69,8 +69,17 @@ private:
 };
 
     template<typename T>
-    Tensor<T>::Tensor(Shape _shape,const  Device _device, TensorOps<T> *_tensor_op)
-        :device(_device), shape(std::move(_shape)), ops(_tensor_op) {}
+    Tensor<T>::Tensor(Shape _shape, const Device _device)
+        : device(_device), shape(std::move(_shape)) {}
+
+    template<typename T>
+    const TensorOps<T>* Tensor<T>::getOps(){
+        if (CpuOps == nullptr) {
+            const auto* _op = new CPUTensorOps<T>();
+            CpuOps = _op;
+        }
+        return CpuOps;
+    }
 
     template<typename T>
     size_t Tensor<T>::size() const {
@@ -79,7 +88,7 @@ private:
         const auto& strides = get_strides();
 
         for (size_t i = 0; i < dims.size(); ++i) {
-            if ( strides[i] != 0 ) {
+            if (strides[i] != 0) {
                 store_size *= dims[i];
             }
         }
@@ -101,6 +110,8 @@ private:
         return shape.total_size();
     }
 
+    template<typename T>
+    const CPUTensorOps<T>* Tensor<T>::CpuOps = nullptr;
 } // namespace Breeze
 
 #endif // TENSOR_H

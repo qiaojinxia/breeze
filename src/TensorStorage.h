@@ -27,11 +27,11 @@ namespace Breeze {
             deallocateMemory();
         }
 
-        // 禁用复制构造函数和赋值运算符
+        // 禁用复制
         TensorStorage(const TensorStorage&) = delete;
         TensorStorage& operator=(const TensorStorage&) = delete;
 
-        // 移动构造函数和移动赋值运算符
+        // 允许移动
         TensorStorage(TensorStorage&& other) noexcept
             : total_size(other.total_size), data(other.data) {
             other.data = nullptr;
@@ -49,14 +49,14 @@ namespace Breeze {
             return *this;
         }
 
-        void copyToDevice(const T* host_data,const size_t size) {
+        void copyToDevice(const T* host_data, const size_t size) {
             if (size != total_size) {
                 throw std::runtime_error("Size mismatch in copyToDevice");
             }
             std::memcpy(data, host_data, size * sizeof(T));
         }
 
-        void copyToHost(T* host_data,const size_t size) const {
+        void copyToHost(T* host_data, const size_t size) const {
             if (size != total_size) {
                 throw std::runtime_error("Size mismatch in copyToHost");
             }
@@ -69,8 +69,7 @@ namespace Breeze {
 
     private:
         void allocateMemory() {
-            // 使用 aligned_alloc 来确保内存对齐
-            constexpr size_t alignment = 64;  // 假设使用 64 字节对齐（适用于 AVX-512）
+            constexpr size_t alignment = 64;
             const size_t size = total_size * sizeof(T);
             const size_t padded_size = (size + alignment - 1) & ~(alignment - 1);
             data = static_cast<T*>(aligned_alloc(alignment, padded_size));
@@ -92,9 +91,23 @@ namespace Breeze {
 
     class Shape {
     public:
-        explicit Shape(const std::vector<size_t>& dims) : dims_(dims) {}
-
+        explicit Shape(std::vector<size_t> dims) : dims_(std::move(dims)) {}
         Shape(const std::initializer_list<size_t> dims) : dims_(dims) {}
+        Shape() : dims_() {}
+
+        // 禁用复制
+        Shape(const Shape&) = delete;
+        Shape& operator=(const Shape&) = delete;
+
+        // 允许移动
+        Shape(Shape&& other) noexcept : dims_(std::move(other.dims_)) {}
+
+        Shape& operator=(Shape&& other) noexcept {
+            if (this != &other) {
+                dims_ = std::move(other.dims_);
+            }
+            return *this;
+        }
 
         [[nodiscard]] size_t dim(const size_t axis) const {
             if (axis >= dims_.size()) {
@@ -108,13 +121,12 @@ namespace Breeze {
         }
 
         [[nodiscard]] size_t total_size() const {
-            //标空为量 也返回 1 个
             if (dims_.empty())
                 return 1;
             return std::accumulate(dims_.begin(), dims_.end(), 1ULL, std::multiplies<>());
         }
 
-        [[nodiscard]] std::vector<size_t> dims() const {
+        [[nodiscard]] const std::vector<size_t>& dims() const {
             return dims_;
         }
 

@@ -8,8 +8,6 @@
 #include <vector>
 #include <cassert>
 #include "../CPUTensor.h"
-#include "../common/Macro.h"
-#include <cassert>
 
 using namespace Breeze;
 class TensorTest {
@@ -29,9 +27,9 @@ public:
     // 测试 expand 操作
     static void test_expand() {
         // 0维度（标量）进行 expand
-        CPUTensor<float> scalar({}); // 假设标量初始化
-        scalar.fill(1.0);
-        const auto expanded_scalar = scalar.expand({2,-1, 2});
+        const auto scalar = CPUTensor<float>::scalar(); // 假设标量初始化
+        scalar->fill(1.0);
+        const auto expanded_scalar = scalar->expand({2,-1, 2});
 
         assert(expanded_scalar->get_shape().dims() == std::vector<size_t>({2, 1 ,2}));
         std::cout << *expanded_scalar << std::endl;
@@ -58,9 +56,9 @@ public:
 
 
         // 0维度（标量）进行 expand
-        CPUTensor<float> scalar1({}); // 假设标量初始化
-        scalar.fill(3.0);
-        const auto expanded3_scalar = scalar.expand({5});
+        const auto scalar2 = CPUTensor<float>::scalar(); // 假设标量初始化
+        scalar2->fill(3.0);
+        const auto expanded3_scalar = scalar->expand({5});
 
         assert(expanded3_scalar->get_shape().dims() == std::vector<size_t>({5}));
         std::cout << *expanded3_scalar << std::endl;
@@ -217,7 +215,7 @@ public:
         }
 
         // 非连续张量的重塑
-        const auto tensor2 = tensor1.slice({S_(0, 1), KEEP, KEEP});
+        const auto tensor2 = tensor1.slice({"0:1"});
         tensor2->fill(2.0);
         std::cout << "Non-contiguous tensor2:" << std::endl;
         std::cout << *tensor2 << std::endl;
@@ -250,13 +248,13 @@ public:
         std::cout << std::endl;
 
         const auto unsqueezed_tensor2 = tensor2.unsqueeze(0);
-        assert(unsqueezed_tensor2->get_shape().dims() == std::vector<size_t>({1, 2, 3}));
+        assert(unsqueezed_tensor2->get_shape().dims() == std::vector<size_t>({1, 2, 1}));
         std::cout << "Unsqueezed tensor2 shape: ";
         print_shape(unsqueezed_tensor2->get_shape().dims());
         std::cout << std::endl;
 
         const auto squeezed_tensor2 = unsqueezed_tensor2->squeeze(0);
-        assert(squeezed_tensor2->get_shape().dims() == std::vector<size_t>({2, 3}));
+        assert(squeezed_tensor2->get_shape().dims() == std::vector<size_t>({2, 1}));
         std::cout << "Squeezed tensor2 shape: ";
         print_shape(squeezed_tensor2->get_shape().dims());
         std::cout << std::endl;
@@ -305,8 +303,8 @@ public:
         tensor3d_2.fill(2.0);
 
         // Slice to create non-contiguous tensors
-        const auto sliced_tensor1 = tensor3d_1.slice({S_(0, 2), S_(1, 3), KEEP});
-        const auto sliced_tensor2 = tensor3d_2.slice({S_(0, 2), S_(1, 3), KEEP});
+        const auto sliced_tensor1 = tensor3d_1.slice({"0:2", "1:3"});
+        const auto sliced_tensor2 = tensor3d_2.slice({"0:2", "1:3"});
 
         // Concatenate along a specific axis
         const auto cat_non_contiguous = CPUTensor<float>::cat({sliced_tensor1.get(), sliced_tensor2.get()}, 1);
@@ -325,8 +323,8 @@ public:
             tensor1d.set_value({static_cast<size_t>(i)}, static_cast<float>(i));
         }
         // Slice to create non-contiguous tensors (e.g., take every other element)
-        const auto sliced_tensor3 = tensor1d.slice({S3_(0, 5, -2)}); // [5, 3, 1]
-        const auto sliced_tensor4 = tensor1d.slice({S3_(1, 6, -2)}); // [6, 3, 2]
+        const auto sliced_tensor3 = tensor1d.slice({"5:-1:-2"}); // [5, 3, 1]
+        const auto sliced_tensor4 = tensor1d.slice({"4:-1:-2"}); // [6, 4, 2]
 
         std::cout << *sliced_tensor3 << std::endl;
         std::cout << *sliced_tensor4 << std::endl;
@@ -348,7 +346,7 @@ public:
         // 1维度拼接
         const auto tensor1 = CPUTensor<float>::arrange(0,20,1);
         std::cout << *tensor1 << std::endl;
-        const auto tensor1_slice = tensor1->slice({S3_(10, 20, -2)});
+        const auto tensor1_slice = tensor1->slice({"20:10:-2"});
         std::cout << *tensor1_slice << std::endl;
         const auto tensor1_slice_clone = tensor1_slice->clone();
         std::cout << *tensor1_slice_clone << std::endl;
@@ -359,7 +357,7 @@ public:
         // 1维度拼接
         const auto tensor2 = CPUTensor<float>({20},1.5);
         std::cout << tensor2 << std::endl;
-        const auto tensor2_slice = tensor2.slice({S3_(10, 20, -2)});
+        const auto tensor2_slice = tensor2.slice({"20:10:-2"});
         std::cout << *tensor2_slice << std::endl;
         const auto tensor2_slice_clone = tensor2_slice->clone();
         std::cout << *tensor2_slice_clone << std::endl;
@@ -367,8 +365,56 @@ public:
         assert(tensor2_slice_clone->get_shape().dims() == std::vector<size_t>({5}));
         std::cout << std::endl;
 
-
     }
+
+    static void test_transpose() {
+        // Transpose a 2D tensor
+        auto tensor2d = CPUTensor<float>::arrange(0,12,1.0)->view({3,4});
+        const auto transposed_2d = tensor2d->transpose(0, 1);
+        std::cout << *transposed_2d << std::endl;
+        assert(transposed_2d->get_shape().dims() == std::vector<size_t>({4, 3}));
+        const auto transposed_2d_c = transposed_2d->clone();
+        std::cout << *transposed_2d_c << std::endl;
+        std::cout << "2D transpose result: ";
+        print_shape(transposed_2d->get_shape().dims());
+        std::cout << std::endl;
+        std::cout << *tensor2d << std::endl;
+
+        // Transpose a 3D tensor
+        const CPUTensor<float> tensor3d({2, 3, 4},2.0);
+        const auto transposed_3d = tensor3d.transpose(1, 2);
+        assert(transposed_3d->get_shape().dims() == std::vector<size_t>({2, 4, 3}));
+        std::cout << "3D transpose result: ";
+        print_shape(transposed_3d->get_shape().dims());
+        std::cout << std::endl;
+
+        // Transpose a 1D tensor (should be a no-op)
+        CPUTensor<float> tensor1d({5});
+        tensor1d.fill(3.0);
+        const auto transposed_1d = tensor1d.transpose(0, 0);
+        assert(transposed_1d->get_shape().dims() == std::vector<size_t>({5}));
+        std::cout << "1D transpose result (no-op): ";
+        print_shape(transposed_1d->get_shape().dims());
+        std::cout << std::endl;
+
+        // Transpose a 4D tensor
+        CPUTensor<float> tensor4d({2, 3, 4, 5});
+        tensor4d.fill(4.0);
+        const auto transposed_4d = tensor4d.transpose(0, 3);
+        assert(transposed_4d->get_shape().dims() == std::vector<size_t>({5, 3, 4, 2}));
+        std::cout << "4D transpose result: ";
+        print_shape(transposed_4d->get_shape().dims());
+        std::cout << std::endl;
+
+        // Error case: Invalid axes
+        try {
+            auto _ = tensor2d->transpose(0, 2);
+            assert(false && "Expected transpose to throw an exception for invalid axes.");
+        } catch (const std::out_of_range& e) {
+            std::cout << "Caught expected error for invalid transpose axes: " << e.what() << std::endl;
+        }
+    }
+
     // 运行所有测试
     static void run_all_tests() {
         test_expand();
@@ -378,7 +424,8 @@ public:
         test_view();
         test_clone();
         test_reshape();
-        // test_non_contiguous();
+        test_non_contiguous();
+        test_transpose();
         std::cout << "All tests passed!" << std::endl;
     }
 };

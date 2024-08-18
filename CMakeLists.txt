@@ -74,7 +74,6 @@ set(HEADERS
         src/CPUTensorOps.h
         src/CPUTensor.h
         src/TensorStorage.h
-        src/common/Const.h
         src/common/Macro.h
 )
 

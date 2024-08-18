@@ -16,7 +16,7 @@ namespace Breeze {
         auto [a_strides, b_strides, target_shape] =
             this->calc_broadcast_shape(a.get_shape().dims(),b.get_shape().dims(),false);
 
-        auto result = std::make_shared<CPUTensor<T>>(Shape(target_shape));
+        auto result = std::make_shared<CPUTensor<T>>(std::move(target_shape));
 
         size_t outer_dim = 1;
         for (size_t i = 0; i < target_shape.size() - 1; ++i) {

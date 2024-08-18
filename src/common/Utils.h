@@ -4,6 +4,8 @@
 #include <vector>
 #include <limits>
 #include <stdexcept>
+#include <sstream>
+#include <string>
 
 class Utils {
 public:
@@ -64,6 +66,33 @@ public:
 
         va_end(args);
         return buffer;
+    }
+
+    static std::vector<int32_t> parseSliceString(const std::string& s, int32_t dim_size) {
+        std::vector<int32_t> result;
+        std::istringstream iss(s);
+        std::string token;
+
+        while (std::getline(iss, token, ':')) {
+            if (token.empty()) {
+                // 对于空字段，我们插入一个特殊值
+                result.push_back(std::numeric_limits<int32_t>::max());
+            } else {
+                result.push_back(std::stoi(token));
+            }
+        }
+
+        // 填充默认值
+        while (result.size() < 3) {
+            result.push_back(std::numeric_limits<int32_t>::max());
+        }
+
+        // 处理默认值
+        if (result[0] == std::numeric_limits<int32_t>::max()) result[0] = 0;
+        if (result[1] == std::numeric_limits<int32_t>::max()) result[1] = dim_size;
+        if (result[2] == std::numeric_limits<int32_t>::max()) result[2] = 1;
+
+        return result;
     }
 
 
