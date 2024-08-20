@@ -28,8 +28,7 @@ public:
     // 测试 expand 操作
     static void test_expand() {
         // 0维度（标量）进行 expand
-        const auto scalar = CPUTensor<float>::scalar(); // 假设标量初始化
-        scalar->fill(1.0);
+        const auto scalar = CPUTensor<float>::scalar(1.0); // 假设标量初始化
         const auto expanded_scalar = scalar->expand({2,-1, 2});
 
         assert(expanded_scalar->get_shape().dims() == std::vector<size_t>({2, 1 ,2}));
@@ -57,8 +56,7 @@ public:
 
 
         // 0维度（标量）进行 expand
-        const auto scalar2 = CPUTensor<float>::scalar(); // 假设标量初始化
-        scalar2->fill(3.0);
+        const auto scalar2 = CPUTensor<float>::scalar(3.0); // 假设标量初始化
         const auto expanded3_scalar = scalar->expand({5});
 
         assert(expanded3_scalar->get_shape().dims() == std::vector<size_t>({5}));
@@ -84,7 +82,7 @@ public:
         std::cout << std::endl;
 
         // Edge case: Unsqueezing a 1D tensor
-        CPUTensor<float> tensor2({4});
+        const CPUTensor<float> tensor2({4});
         const auto unsqueezed_tensor2 = tensor2.unsqueeze(0);
         assert(unsqueezed_tensor2->get_shape().dims() == std::vector<size_t>({1, 4}));
         std::cout << "Unsqueezed tensor2 shape: ";
@@ -102,7 +100,7 @@ public:
     // 测试 squeeze 操作
     static void test_squeeze() {
         // Basic squeeze
-        CPUTensor<float> tensor1({2, 1, 4, 3});
+        const CPUTensor<float> tensor1({2, 1, 4, 3});
         const auto squeezed_tensor1 = tensor1.squeeze(1);
         assert(squeezed_tensor1->get_shape().dims() == std::vector<size_t>({2, 4, 3}));
         std::cout << "Squeezed tensor1 shape: ";
@@ -110,7 +108,7 @@ public:
         std::cout << std::endl;
 
         // Edge case: Squeeze a tensor with no unit dimensions
-        CPUTensor<float> tensor2({2, 4, 3});
+        const CPUTensor<float> tensor2({2, 4, 3});
         const auto squeezed_tensor2 = tensor2.squeeze(1); // Squeezing non-unit dimension
         assert(squeezed_tensor2->get_shape().dims() == tensor2.get_shape().dims());
         std::cout << "Squeezed tensor2 shape (no change expected): ";
@@ -118,7 +116,7 @@ public:
         std::cout << std::endl;
 
         // Edge case: Squeezing an already squeezed dimension
-        CPUTensor<float> tensor3({1});
+        const CPUTensor<float> tensor3({1});
         const auto squeezed_tensor3 = tensor3.squeeze(0);
         assert(squeezed_tensor3->get_shape().dims() == std::vector<size_t>({}));
         std::cout << "Squeezed tensor3 shape (empty): ";
@@ -420,24 +418,258 @@ public:
         // MEASURE_TIME(auto  a1 = CPUTensor<float>::arrange(1,100000000,1.0););
         const auto a1 = CPUTensor<float>::arrange(1,10000000,1.0)->expand({250,-1})->slice({":","::2"});
         // MEASURE_TIME(auto x = a1->clone());
-        auto x = a1->clone();
+        const auto x = a1->clone();
         const auto data_bytes = x->n_bytes();
         const double megabytes = static_cast<double>(data_bytes) / (1024.0 * 1024.0);
         std::cout << Utils::Format("Tensor memory size on CPU (megabytes): {%d} mb",megabytes)  << std::endl;
     }
 
+    static void test_permute() {
+      {
+
+          const auto t1 = CPUTensor<float>::arrange(0,24,1.0)->view({2,3,4});
+          std::cout << *t1  << std::endl;
+          const auto t2 = t1 ->permute({-1,-2,-3});
+          std::cout << *t2  << std::endl;
+          const auto t3 = t2->contiguous();
+          assert(t3->get_shape().dims() == std::vector<size_t>({4, 3, 2}));
+          assert(t3 != t2);
+          assert(t3->is_contiguous());
+
+      }
+
+            // 基本的维度重排测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            std::cout << *t1 << std::endl;
+            const auto t2 = t1->permute({2, 0, 1});
+            std::cout << *t2 << std::endl;
+            assert(t2->get_shape().dims() == std::vector<size_t>({4, 2, 3}));
+            assert(t2->get_strides() == std::vector<size_t>({1, 12, 4}));
+            assert(t2->at({0,0,0}) == t1->at({0,0,0}));
+            assert(t2->at({0,0,1}) == t1->at({0,1,0}));
+            assert(t2->at({0,0,2})== t1->at({0,2,0}));
+        }
+
+        // 负数维度测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({-1, -3, -2});
+            assert(t2->get_shape().dims() == std::vector<size_t>({4, 2, 3}));
+        }
+
+        // 恒等置换测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({0, 1, 2});
+            assert(t2->get_shape().dims() == t1->get_shape().dims());
+            assert(t2->get_strides() == t1->get_strides());
+        }
+
+        // 一维张量测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 5, 1.0);
+            const auto t2 = t1->permute({0});
+            assert(t2->get_shape().dims() == t1->get_shape().dims());
+            assert(t2->get_strides() == t1->get_strides());
+        }
+
+        // 高维张量测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 120, 1.0)->view({2, 3, 4, 5});
+            const auto t2 = t1->permute({3, 1, 2, 0});
+            assert(t2->get_shape().dims() == std::vector<size_t>({5, 3, 4, 2}));
+        }
+
+
+        // 维度不匹配错误测试
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({0, 1});
+        }, std::invalid_argument);
+
+        // 无效维度错误测试
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({0, 1, 3});
+        }, std::out_of_range);
+
+        // 重复维度错误测试
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({0, 1, 1});
+        }, std::invalid_argument);
+
+        // 大的负数维度错误测试
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({0, 1, -4});
+        }, std::out_of_range);
+
+        // 数据共享测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({2, 0, 1});
+            t1->data()[0] = 100.0f;
+            assert(t2->data()[0] == 100.0f);
+        }
+
+        // contiguous 测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = t1->permute({2, 1, 0});
+            const auto t3 = t2->contiguous();
+            assert(t3->get_shape().dims() == std::vector<size_t>({4, 3, 2}));
+            assert(t3 != t2);
+            assert(t3->is_contiguous());
+        }
+
+        // 一维张量的 -1 维度测试
+      {
+          const auto t1 = CPUTensor<float>::arrange(0, 1, 1.0);
+          const auto t2 = t1->permute({-1});
+          // 这里不应该抛出异常，因为对一维张量使用 -1 是有效的
+          assert(t1->get_shape().dims() == t2->get_shape().dims());
+      }
+
+      {
+          // 创建一个 2x3x1 的张量
+          auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3, 1});
+          std::cout << "Original tensor:" << *t1 << std::endl;
+
+          // 扩展到 2x3x4
+          auto t2 = t1->expand({2, 3, 4});
+          std::cout << "\nExpanded tensor:" << *t2  << std::endl;
+
+          // 验证扩展后的形状
+          assert(t2->get_shape().dims() == std::vector<size_t>({2, 3, 4}));
+
+          // 验证扩展后的数据
+          for (size_t i = 0; i < 2; ++i) {
+              for (size_t j = 0; j < 3; ++j) {
+                  float expected_value = i * 3 + j;
+                  for (size_t k = 0; k < 4; ++k) {
+                      assert(t2->at({i,j,k}) == expected_value);
+                  }
+              }
+          }
+
+          // 执行 permute 操作，交换维度 -1, -2, -3 (等价于 2, 1, 0)
+          auto t3 = t2->permute({-1, -2, -3})->contiguous();
+          std::cout << "\nPermuted tensor:" << *t3 << std::endl;
+
+          // 验证 permute 后的形状
+          assert(t3->get_shape().dims() == std::vector<size_t>({4, 3, 2}));
+
+          // 验证 permute 后的数据
+          for (size_t i = 0; i < 4; ++i) {
+              for (size_t j = 0; j < 3; ++j) {
+                  for (size_t k = 0; k < 2; ++k) {
+                      float expected_value = k * 3 + j;
+                      assert(t3->at({i,j,k}) == expected_value);
+                  }
+              }
+          }
+
+      }
+
+        std::cout << "All permute tests passed!" << std::endl;
+
+    }
+
+
+    static void test_flatten() {
+        {
+            // 创建一个连续的 2x3x4 张量
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            std::cout << "Original tensor:" << std::endl;
+            std::cout << *t1 << std::endl;
+
+            // 默认flatten（应该不复制数据）
+            const auto t2 = t1->flatten();
+            std::cout << "\nFlattened tensor (default, should not copy data):" << std::endl;
+            // print_tensor(*t2);
+            assert(t2->get_shape().dims() == std::vector<size_t>({24}));
+            assert(t2->data() == t1->data());  // 检查数据是否共享
+            std::cout << *t2 << std::endl;
+
+            // 创建一个非连续的张量（例如通过转置）
+            const auto t3 = t1->permute({2, 1, 0});
+            std::cout << "\nNon-contiguous tensor:" << std::endl;
+            std::cout << *t3 << std::endl;
+
+            // 对非连续张量进行flatten（应该复制数据）
+            const auto t4 = t3->flatten();
+            std::cout << "\nFlattened non-contiguous tensor (should copy data):" << std::endl;
+            std::cout << *t4 << std::endl;
+            assert(t4->get_shape().dims()  == std::vector<size_t>({24}));
+            assert(t4->data() != t3->data());  // 检查数据是否被复制
+        }
+
+
+
+        {
+            // 创建一个 1x2x8 的张量，填充值为 2.0
+            const auto tensor = CPUTensor<float>({1, 2, 8}, 2.0);
+
+            // 执行 expand 操作
+            const auto expanded = tensor.expand({16, 2, 8});
+
+            // 模拟 expanded[0::2,:,:]
+            const auto tensor1 = expanded->slice({"::2"});
+
+            std::cout << "Original tensor after expand and slice:" << std::endl;
+
+            // 第一种情况：flatten(0,1)，预期会产生复制
+            const auto x = tensor1->flatten(0, 1);
+
+            std::cout << "\nAfter flatten(1,2) (should copy):" << std::endl;
+
+            // 断言
+            assert(x->get_shape().dims() == std::vector<size_t>({16, 8}));
+            assert(x->is_contiguous());
+            assert(x->get_strides() == std::vector<size_t>({8, 1}));
+            assert(x->data() != tensor1->data());  // 数据应该被复制
+
+            // 第二种情况：flatten(0,1)，预期不会产生复制
+            const auto x1 = tensor1->flatten(1, 2);
+
+            std::cout << "\nAfter flatten(0,1) (should not copy):" << std::endl;
+
+            // 断言
+            assert(x1->get_shape().dims() == std::vector<size_t>({8, 16}));
+            assert(!x1->is_contiguous());
+            assert(x1->get_strides() == std::vector<size_t>({0, 1}));
+            assert(x1->data() == tensor1->data());  // 数据不应该被复制
+
+        }
+        std::cout << "All flatten tests passed!" << std::endl;
+    }
+
+    static void test_randn() {
+        const auto random_tensor1 = CPUTensor<float>::randn({2, 3, 4});
+        std::cout << *random_tensor1 << std::endl;
+        const auto random_tensor2 = CPUTensor<float>::randn({2, 4, 7});
+
+        const auto random_tensor3 =  random_tensor1->matmul(*random_tensor2);
+        std::cout << *random_tensor3 << std::endl;
+
+    }
     // 运行所有测试
     static void run_all_tests() {
+        test_randn();
+        test_flatten();
+        test_permute();
         test_omp();
-        // test_expand();
-        // test_cat();
-        // test_unsqueeze();
-        // test_squeeze();
-        // test_view();
-        // test_clone();
-        // test_reshape();
-        // test_non_contiguous();
-        // test_transpose();
+        test_expand();
+        test_cat();
+        test_unsqueeze();
+        test_squeeze();
+        test_view();
+        test_clone();
+        test_reshape();
+        test_non_contiguous();
+        test_transpose();
         std::cout << "All tests passed!" << std::endl;
     }
 };

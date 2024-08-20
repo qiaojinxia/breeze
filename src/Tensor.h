@@ -17,12 +17,13 @@ class Tensor {
 protected:
     Device device;
     Shape shape;
+    [[nodiscard]] bool is_contiguous_in_range(int32_t start_dim, int32_t end_dim) const;
 public:
     static const CPUTensorOps<T>* CpuOps;
     static const TensorOps<T>* getOps();
     Tensor(Shape _shape, Device _device);
     virtual ~Tensor() = default;
-
+    virtual T operator[](const std::string& index) const = 0;
     virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
     virtual std::shared_ptr<Tensor> operator-(const Tensor& rhs) const = 0;
     virtual std::shared_ptr<Tensor> operator*(const Tensor& rhs) const = 0;
@@ -37,6 +38,10 @@ public:
     [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze(int32_t dim) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> expand(const std::vector<int32_t>& new_shape) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> transpose(int32_t dim0, int32_t dim1) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> permute(const std::vector<int32_t>& dims) = 0;
+
+    [[nodiscard]] virtual std::shared_ptr<Tensor> flatten() = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> flatten(int start_dim, int end_dim) = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
@@ -111,6 +116,21 @@ private:
         return shape.total_size();
     }
 
+    template<typename T>
+    bool Tensor<T>::is_contiguous_in_range(const int start_dim,int end_dim) const{
+        const auto& shape = get_shape().dims();
+        const auto& strides = get_strides();
+        size_t expected_stride = 1;
+        if(end_dim == -1) end_dim += shape.size();
+        for (int i = end_dim; i >= start_dim; --i) {
+            if (strides[i] == 0) return false;
+            if (strides[i] != expected_stride) {
+                return false;
+            }
+            expected_stride *= shape[i];
+        }
+        return true;
+    }
     template<typename T>
     const CPUTensorOps<T>* Tensor<T>::CpuOps = nullptr;
 } // namespace Breeze

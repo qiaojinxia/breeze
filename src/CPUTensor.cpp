@@ -51,7 +51,7 @@ namespace Breeze {
     CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
                             const size_t offset, std::vector<size_t> shape_size, std::vector<int32_t> steps)
         : Tensor<T>(Shape(std::move(shape_size)), Device::CPU),
-          memory_block_(std::move(data)),
+          memory_block_(data),
           offset_(offset),
           steps_(std::move(steps)) {}
 
@@ -59,7 +59,7 @@ namespace Breeze {
     CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
                             const size_t offset, std::vector<size_t> shape_size)
         : Tensor<T>(Shape(std::move(shape_size)), Device::CPU),
-          memory_block_(std::move(data)),
+          memory_block_(data),
           offset_(offset),
           steps_(std::vector<int32_t>(this->get_shape().ndim(), 1)) {}
 
@@ -68,7 +68,7 @@ namespace Breeze {
                             const size_t offset, std::vector<size_t> shape_size,
                             std::vector<int32_t> steps, std::vector<size_t> strides)
         : Tensor<T>(Shape(std::move(shape_size)), Device::CPU),
-          memory_block_(std::move(data)),
+          memory_block_(data),
           offset_(offset),
           steps_(std::move(steps)),
           strides_(std::move(strides)) {}
@@ -76,8 +76,39 @@ namespace Breeze {
     template<typename T>
     CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, std::vector<size_t> shape_size)
         : Tensor<T>(Shape(std::move(shape_size)), Device::CPU),
-          memory_block_(std::move(data)),
+          memory_block_(data),
           steps_(std::vector<int32_t>(this->get_shape().ndim(), 1)) {}
+
+
+    template<typename T>
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::randn(std::vector<size_t> shape) {
+        const size_t seed = std::chrono::system_clock::now().time_since_epoch().count();
+        std::default_random_engine generator(seed);
+        return randn(shape, generator);
+    }
+
+    template<typename T>
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::randn(std::vector<size_t>& shape,
+                                              std::default_random_engine& generator) {
+        // 创建一个新的 CPUTensor
+        auto tensor = std::make_shared<CPUTensor>(Shape(std::move(shape)));
+
+        // 创建标准正态分布
+        std::normal_distribution<T> distribution(0.0, 1.0);
+
+        // 填充张量with随机数
+        for (size_t i = 0; i < tensor->num_elements(); ++i) {
+            tensor->data()[i] = distribution(generator);
+        }
+
+        return tensor;
+    }
+
+    template<typename T>
+    T  CPUTensor<T>::operator[](const std::string& index) const{
+        //todo
+        return this->at({1,2,3});
+    }
 
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensor<T>::operator+(const Tensor<T>& rhs) const {
@@ -229,21 +260,7 @@ namespace Breeze {
 
     template <typename T>
     bool CPUTensor<T>::is_contiguous() const {
-        // 检查是否所有的步长都是1
-        for (const auto& step : steps_) {
-            if (step != 1) return false;
-        }
-        const auto strides = get_strides();
-        // 检查是否内存布局是连续的
-        size_t expected_stride = 1;
-        for (int i = strides.size() - 1; i >= 0; --i) {
-            if (strides[i] == 0) {
-                return false;
-            }
-            if (strides[i] != expected_stride) return false;
-            expected_stride *= this->get_shape().dims()[i];
-        }
-        return true;
+       return this->is_contiguous_in_range(0, -1);
     }
 
     template<typename T>
@@ -391,12 +408,8 @@ namespace Breeze {
 
         // 处理标量（0、1维张量）的情况
         if (ndim == 1 || ndim == 0) {
-            return std::make_shared<CPUTensor>(
-                memory_block_,
-                offset_,
-                std::move(new_shape),
-                std::move(new_steps),
-                std::move(new_strides)
+            return std::make_shared<CPUTensor>(memory_block_, offset_,
+                std::move(new_shape), std::move(new_steps), std::move(new_strides)
             );
         }
 
@@ -416,13 +429,127 @@ namespace Breeze {
         }
 
         // 创建新的 CPUTensor，共享原始数据，但其他属性都是新的
-        return std::make_shared<CPUTensor>(
-            memory_block_,
-            offset_,
-            std::move(new_shape),
-            std::move(new_steps),
-            std::move(new_strides)
+        return std::make_shared<CPUTensor>(memory_block_, offset_,
+            std::move(new_shape), std::move(new_steps), std::move(new_strides)
         );
+    }
+
+    template <typename T>
+    [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::permute(const std::vector<int32_t>& dims) {
+        auto ndim = this->get_shape().ndim();
+
+        // 检查维度数量是否匹配
+        if (dims.size() != ndim) {
+            throw std::invalid_argument(Utils::Format("number of dimensions in the tensor input does not match the length of the desired ordering of "
+                                                      "dimensions i.e. input.dim() = %d is not equal to len(dims) = %d", dims.size(), ndim));
+        }
+        //标量 和向量 保持不变
+        if (ndim == 0 || ndim == 1) {
+            return this->shared_from_this();
+        }
+        std::vector<size_t> new_shape(ndim);
+        std::vector<size_t> new_strides(ndim);
+        std::vector<int32_t> new_steps(ndim);
+        const auto& old_shape = this->get_shape().dims();
+        const auto& old_strides = this->get_strides();
+        const auto& old_steps = this->get_steps();
+
+        std::vector<bool> used(ndim, false);
+
+        for (size_t i = 0; i < ndim; ++i) {
+            int32_t dim = dims[i];
+            // 处理负数维度
+            if (dim < 0) {
+                dim += ndim;
+            }
+
+            // 检查维度的有效性
+            if (dim < 0 || dim >= ndim) {
+                throw std::out_of_range(Utils::Format("Dimension out of range (expected to be in range of [-3, 2], but got 100)", -ndim, ndim-1, dims.size()));
+            }
+
+            // 检查维度是否重复
+            if (used[dim]) {
+                throw std::invalid_argument("duplicate dims are not allowed.");
+            }
+            used[dim] = true;
+
+            new_shape[i] = old_shape[dim];
+            new_strides[i] = old_strides[dim];
+            new_steps[i] = old_steps[dim];
+        }
+
+        // 创建新的 CPUTensor，共享原始数据，但其他属性都是新的
+        return std::make_shared<CPUTensor>(memory_block_, offset_,
+            std::move(new_shape), std::move(new_steps), std::move(new_strides)
+        );
+    }
+
+    template <typename T>
+    [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::flatten() {
+        return flatten(0,-1);
+    }
+
+    template <typename T>
+    [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::flatten(int start_dim, int end_dim) {
+        const auto& current_shape = this->get_shape().dims();
+        const std::vector<size_t> current_strides = get_strides();
+
+        const int32_t ndim = current_shape.size();
+        // 处理负数维度
+        if (start_dim < 0) start_dim += ndim;
+        if (end_dim < 0) end_dim += ndim;
+        if(start_dim == end_dim) {
+            return this->shared_from_this();
+        }
+        // 确保维度在有效范围内
+        if (start_dim < 0 || start_dim >= ndim || end_dim < 0 || end_dim >= ndim || start_dim > end_dim) {
+            throw std::out_of_range(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)",
+                ndim -1, -ndim, start_dim = ndim ? start_dim : end_dim ));
+        }
+
+        std::vector<size_t> new_shape;
+        std::vector<size_t> new_strides;
+        size_t flattened_size = 1;
+
+        // 保留 start_dim 之前的维度
+        new_shape.reserve(start_dim);
+        new_strides.reserve(start_dim);
+        for (int i = 0; i < start_dim; ++i) {
+            new_shape.push_back(current_shape[i]);
+            new_strides.push_back(current_strides[i]);
+        }
+
+        // 计算需要展平的维度的大小
+        for (int i = start_dim; i <= end_dim; ++i) {
+            flattened_size *= current_shape[i];
+        }
+        new_shape.push_back(flattened_size);
+        new_strides.push_back(1);
+
+        // 添加 end_dim 之后的维度
+        for (int i = end_dim + 1; i < ndim; ++i) {
+            new_shape.push_back(current_shape[i]);
+            new_strides.push_back(current_strides[i]);
+        }
+
+        // 判断 需要合并的维度里面有没有非连续的
+        if (this->is_contiguous_in_range(start_dim, end_dim)) {
+            new_strides = Utils::compute_strides_with_origin(new_shape,new_strides);
+            std::vector<int32_t> new_steps = this->get_steps();
+            return std::make_shared<CPUTensor>(memory_block_, offset_,
+                std::move(new_shape), std::move(new_steps),std::move(new_strides));
+        }
+
+        // 如果不是连续的，调用 clone()
+        auto currentTensor = std::dynamic_pointer_cast<CPUTensor>( this->clone());
+        if (currentTensor) {
+            currentTensor->shape = Shape(new_shape);
+        } else {
+            throw std::runtime_error("Unexpected tensor type");
+        }
+
+        return currentTensor;
     }
 
     template <typename T>
@@ -585,7 +712,7 @@ namespace Breeze {
             }
         }
 
-        new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
+        new_strides = Utils::compute_strides_with_origin(new_shape, new_strides);
 
         return std::make_shared<CPUTensor>(memory_block_, this->offset_,
            std::move(new_shape), std::move(new_steps), std::move(new_strides));
@@ -617,7 +744,7 @@ namespace Breeze {
         }
 
         // 使用新函数重新计算strides
-        new_strides = Utils::compute_strides_with_zeros(new_shape, new_strides);
+        new_strides = Utils::compute_strides_with_origin(new_shape, new_strides);
 
         return std::make_shared<CPUTensor>(memory_block_, this->offset_,
             std::move(new_shape), std::move(new_steps), std::move(new_strides));
@@ -688,8 +815,8 @@ namespace Breeze {
         return tensor;
     }
     template <typename T>
-    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::scalar() {
-        return std::make_shared<CPUTensor>();
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::scalar(const T value) {
+        return std::make_shared<CPUTensor>(Shape(),value);
     }
 
     template <typename T>
@@ -795,6 +922,8 @@ namespace Breeze {
 
         return result;
     }
+
+
     // Explicit instantiation for common types
     template class CPUTensor<float>;
     template class CPUTensor<double>;

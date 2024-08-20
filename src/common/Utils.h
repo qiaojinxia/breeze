@@ -26,7 +26,7 @@ public:
         return strides;
     }
 
-    static std::vector<size_t> compute_strides_with_zeros(const std::vector<size_t>& shape, const std::vector<size_t>& original_strides) {
+    static std::vector<size_t> compute_strides_with_origin(const std::vector<size_t>& shape, const std::vector<size_t>& original_strides) {
         if (shape.empty()) {
             return{};
         }
@@ -68,7 +68,7 @@ public:
         return buffer;
     }
 
-    static std::vector<int32_t> parseSliceString(const std::string& s, int32_t dim_size) {
+    static std::vector<int32_t> parseSliceString(const std::string& s, const int32_t dim_size) {
         std::vector<int32_t> result;
         std::istringstream iss(s);
         std::string token;
@@ -94,6 +94,7 @@ public:
 
         return result;
     }
+
 
 
 };

@@ -4,7 +4,7 @@
 #include "Tensor.h"
 #include "TensorStorage.h"
 #include <cblas.h>
-
+#include <random>
 
 namespace Breeze {
 
@@ -26,6 +26,7 @@ namespace Breeze {
             std::vector<size_t> shape_size, std::vector<int32_t> steps, std::vector<size_t> strides);
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, std::vector<size_t> shape_size);
 
+        T operator[](const std::string& index) const override;
         std::shared_ptr<Tensor<T>> operator+(const Tensor<T>& rhs) const override;
         std::shared_ptr<Tensor<T>> operator-(const Tensor<T>& rhs) const override;
         std::shared_ptr<Tensor<T>> operator*(const Tensor<T>& rhs) const override;
@@ -40,8 +41,15 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> squeeze(int32_t dim) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> expand(const std::vector<int32_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> transpose(int32_t dim0, int32_t dim1) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> permute(const std::vector<int32_t>& dims) override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> flatten() override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> flatten(int start_dim, int end_dim) override;
+
 
         static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<T>*>& tensors, int32_t dim);
+        static std::shared_ptr<CPUTensor> randn(std::vector<size_t> shape);
+        static std::shared_ptr<CPUTensor> randn(std::vector<size_t>& shape, std::default_random_engine& generator);
+
 
         T* data() override;
         [[nodiscard]] const T* data() const override;
@@ -67,7 +75,7 @@ namespace Breeze {
         [[nodiscard]] size_t n_bytes() const override;
 
         static std::shared_ptr<CPUTensor> arrange(T begin, T end, T step);
-        static std::shared_ptr<CPUTensor> scalar();
+        static std::shared_ptr<CPUTensor> scalar(T value);
         static std::shared_ptr<CPUTensor> vector(size_t size);
 
     private:

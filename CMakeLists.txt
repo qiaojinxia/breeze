@@ -86,9 +86,11 @@ add_executable(breeze ${SOURCES})
 target_compile_definitions(breeze PRIVATE
         ACCELERATE_NEW_LAPACK
         ACCELERATE_LAPACK_ILP64
+
 )
 
-target_compile_options(breeze PRIVATE "-Dmavx")
+target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} "-mavx" )
+
 
 # 设置包含目录
 target_include_directories(breeze PRIVATE
