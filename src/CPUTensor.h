@@ -17,6 +17,7 @@ namespace Breeze {
         CPUTensor(std::initializer_list<size_t> shape_size);
         CPUTensor(Shape shape, T value);
         CPUTensor(const CPUTensor& other);
+        CPUTensor(const CPUTensor& other, std::vector<size_t>&& shape_size);
         CPUTensor();
         CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data, size_t offset,
             std::vector<size_t> shape_size);
@@ -45,11 +46,11 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> flatten() override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> flatten(int start_dim, int end_dim) override;
 
-
         static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<T>*>& tensors, int32_t dim);
+        static std::shared_ptr<CPUTensor> stack(const std::vector<Tensor<T>*>& tensors, int32_t dim);
         static std::shared_ptr<CPUTensor> randn(std::vector<size_t> shape);
         static std::shared_ptr<CPUTensor> randn(std::vector<size_t>& shape, std::default_random_engine& generator);
-
+        static bool isSafeToModify(std::shared_ptr<Tensor<T>> tensor);
 
         T* data() override;
         [[nodiscard]] const T* data() const override;
@@ -77,12 +78,12 @@ namespace Breeze {
         static std::shared_ptr<CPUTensor> arrange(T begin, T end, T step);
         static std::shared_ptr<CPUTensor> scalar(T value);
         static std::shared_ptr<CPUTensor> vector(size_t size);
-
     private:
         std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block_;
         size_t offset_ = 0;
         std::vector<int32_t> steps_;
         std::vector<size_t> strides_;
+        static void cat_out(const std::vector<Tensor<T>*>& tensors, int32_t dim, CPUTensor* result);
     };
 } // namespace Breeze
 

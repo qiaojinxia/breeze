@@ -651,12 +651,105 @@ public:
         std::cout << *random_tensor1 << std::endl;
         const auto random_tensor2 = CPUTensor<float>::randn({2, 4, 7});
 
-        const auto random_tensor3 =  random_tensor1->matmul(*random_tensor2);
+        auto random_tensor3 =  random_tensor1->matmul(*random_tensor2);
+        auto x = CPUTensor<float>::isSafeToModify(random_tensor3);
         std::cout << *random_tensor3 << std::endl;
+
+    }
+
+    static void test_stack(){
+        // 基本 stack 操作测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
+            const auto t3 = CPUTensor<float>::arrange(12, 18, 1.0)->view({2, 3});
+
+            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get(), t3.get()};
+
+            // 在第 0 维 stack
+            const auto stacked0 = CPUTensor<float>::stack(tensors, 0);
+            assert(stacked0->get_shape().dims() == std::vector<size_t>({3, 2, 3}));
+            assert(stacked0->data()[0] == 0.0f && stacked0->data()[6] == 6.0f && stacked0->data()[12] == 12.0f);
+
+            // 在第 1 维 stack
+            const auto stacked1 = CPUTensor<float>::stack(tensors, 1);
+            std::cout << *stacked1 << std::endl;
+            assert(stacked1->get_shape().dims() == std::vector<size_t>({2, 3, 3}));
+            assert(stacked1->data()[0] == 0.0f && stacked1->data()[3] == 6.0f && stacked1->data()[6] == 12.0f);
+
+            // 在第 2 维 stack
+            const auto stacked2 = CPUTensor<float>::stack(tensors, 2);
+            assert(stacked2->get_shape().dims() == std::vector<size_t>({2, 3, 3}));
+            std::cout << *stacked2 << std::endl;
+            assert(stacked2->data()[0] == 0.0f && stacked2->data()[1] == 6.0f && stacked2->data()[2] == 12.0f);
+        }
+
+        // 高维张量 stack 测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = CPUTensor<float>::arrange(24, 48, 1.0)->view({2, 3, 4});
+
+            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
+
+            const auto stacked = CPUTensor<float>::stack(tensors, 1);
+            std::cout << *stacked << std::endl;
+            assert(stacked->get_shape().dims() == std::vector<size_t>({2, 2, 3, 4}));
+            assert(stacked->data()[0] == 0.0f && stacked->data()[24] == 12.0f);
+        }
+
+        // 负数维度测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
+
+            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
+
+            const auto stacked = CPUTensor<float>::stack(tensors, -1);  // 应该等同于 dim=2
+            assert(stacked->get_shape().dims() == std::vector<size_t>({2, 3, 2}));
+        }
+
+        // 非连续张量测试
+        {
+            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = t1->permute({1, 0})->contiguous()->view({2, 3});  // 非连续张量，但形状相同
+
+            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
+
+            const auto stacked = CPUTensor<float>::stack(tensors, 0);
+            assert(stacked->get_shape().dims() == std::vector<size_t>({2, 2, 3}));
+            assert(stacked->data()[0] == 0.0f && stacked->data()[6] == 0.0f);
+            assert(stacked->data()[1] == 1.0f && stacked->data()[7] == 3.0f);
+            assert(stacked->data()[2] == 2.0f && stacked->data()[8] == 1.0f);
+            assert(stacked->data()[3] == 3.0f && stacked->data()[9] == 4.0f);
+            assert(stacked->data()[4] == 4.0f && stacked->data()[10] == 2.0f);
+            assert(stacked->data()[5] == 5.0f && stacked->data()[11] == 5.0f);
+        }
+
+        // 错误处理测试
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arrange(0, 4, 1.0)->view({2, 2});  // 形状不匹配
+
+            CPUTensor<float>::stack({t1.get(), t2.get()}, 0);
+        }, std::invalid_argument);
+
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
+
+
+            CPUTensor<float>::stack({t1.get(), t2.get()}, 3);  // 无效的维度
+        }, std::invalid_argument);
+
+        ASSERT_THROWS({
+            std::vector<Tensor<float>*> tensors;  // 空向量
+            CPUTensor<float>::stack(tensors, 0);
+        }, std::invalid_argument);
 
     }
     // 运行所有测试
     static void run_all_tests() {
+        test_stack();
         test_randn();
         test_flatten();
         test_permute();

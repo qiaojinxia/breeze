@@ -130,6 +130,26 @@ namespace Breeze {
             return dims_;
         }
 
+
+        [[nodiscard]] std::string dims_str() const {
+            // 将 '[' 作为起始字符
+            std::string s = "[";  // 用双引号表示字符串
+
+            // 使用 std::accumulate 拼接字符串
+            s += std::accumulate(std::begin(dims_), std::end(dims_), std::string{},
+                [](const std::string& a,const size_t b) {
+                    // 如果 a 为空则返回第一个元素 b 否则添加 ',' 和 b
+                    return a.empty() ? std::to_string(b) : a + "," + std::to_string(b);
+                });
+
+            // 添加 ']' 作为结束字符
+            s += "]";  // 用双引号表示字符串
+
+            return s;
+        }
+
+
+
         [[nodiscard]] std::vector<size_t> strides() const {
             return Utils::compute_strides(this->dims());
         }
