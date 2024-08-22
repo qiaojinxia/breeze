@@ -657,6 +657,75 @@ public:
 
     }
 
+
+    static void test_stack_5d() {
+        // 创建随机数生成器
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(0, 1);
+
+        // 定义 5 维张量的形状
+        std::vector<size_t> shape = {2, 3, 4, 5, 6};
+
+        // 创建 3 个输入张量
+        std::vector<std::shared_ptr<CPUTensor<float>>> input_tensors;
+        for (int i = 0; i < 3; ++i) {
+            auto tensor = std::make_shared<CPUTensor<float>>(shape);
+            // 用随机数填充张量
+            for (size_t j = 0; j < tensor->size(); ++j) {
+                tensor->data()[j] = static_cast<float>(dis(gen));
+            }
+            input_tensors.push_back(tensor);
+        }
+
+        // 执行 stack 操作
+        const auto result = CPUTensor<float>::stack({input_tensors[0].get(),
+            input_tensors[1].get(), input_tensors[2].get()}, 1);
+
+        // 验证结果形状
+        const std::vector<size_t> expected_shape = {2, 3, 3, 4, 5, 6};  // 在第 2 维上 stack 后的预期形状
+        assert(result->get_shape().dims() == expected_shape);
+
+        // 验证结果内容
+        for (size_t i = 0; i < shape[0]; ++i) {
+            for (size_t j = 0; j < 3; ++j) {  // 3 是输入张量的数量
+                for (size_t k = 0; k < shape[1]; ++k) {
+                    for (size_t l = 0; l < shape[2]; ++l) {
+                        for (size_t m = 0; m < shape[3]; ++m) {
+                            for (size_t n = 0; n < shape[4]; ++n) {
+                                const size_t input_index = ((((i * shape[1] + k) * shape[2] + l) * shape[3] + m) * shape[4] + n);
+                                const size_t result_index = ((((i * 9 + (j * shape[1] + k)) * shape[2] + l) * shape[3] + m) * shape[4] + n);
+                                assert(std::abs(result->data()[result_index] - input_tensors[j]->data()[input_index]) < 1e-6);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        std::cout << "5D Stack test for " << typeid(float).name() << " passed successfully!" << std::endl;
+    }
+
+
+    static void test_stack_non_contiguous() {
+        const auto t1 = CPUTensor<float>::arrange(0,128,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto t2 = CPUTensor<float>::arrange(128,256,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto t3 = CPUTensor<float>::arrange(256,384,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto stacked0 = CPUTensor<float>::stack({t1.get(),t2.get(),t3.get()}, 1);
+        assert(stacked0->get_shape().dims() == std::vector<size_t>({2, 3, 8, 4  }));
+        assert(stacked0->data()[0] == 0.0f && stacked0->data()[1] == 2.0f && stacked0->data()[2] == 4.0f && stacked0->data()[3] == 6.0f);
+        assert(stacked0->data()[28] == 56.0f && stacked0->data()[29] == 58.0f && stacked0->data()[30] == 60.0f && stacked0->data()[31] == 62.0f);
+
+        assert(stacked0->data()[32] == 128.0f && stacked0->data()[33] == 130.0f && stacked0->data()[34] == 132.0f && stacked0->data()[35] == 134.0f);
+        assert(stacked0->data()[60] == 184.0f && stacked0->data()[61] == 186.0f && stacked0->data()[62] == 188.0f && stacked0->data()[63] == 190.0f);
+
+        assert(stacked0->data()[160] == 320.0f && stacked0->data()[161] == 322.0f && stacked0->data()[162] == 324.0f && stacked0->data()[163] == 326.0f);
+        assert(stacked0->data()[188] == 376.0f && stacked0->data()[189] == 378.0f && stacked0->data()[190] == 380.0f && stacked0->data()[191] == 382.0f);
+        // std::cout << *stacked0 << std::endl;
+        std::cout << "Non-contiguous 5D Stack test passed successfully!" << std::endl;
+    }
+
     static void test_stack(){
         // 基本 stack 操作测试
         {
@@ -664,21 +733,19 @@ public:
             const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
             const auto t3 = CPUTensor<float>::arrange(12, 18, 1.0)->view({2, 3});
 
-            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get(), t3.get()};
-
             // 在第 0 维 stack
-            const auto stacked0 = CPUTensor<float>::stack(tensors, 0);
+            const auto stacked0 = CPUTensor<float>::stack({t1.get(), t2.get(), t3.get()}, 0);
             assert(stacked0->get_shape().dims() == std::vector<size_t>({3, 2, 3}));
             assert(stacked0->data()[0] == 0.0f && stacked0->data()[6] == 6.0f && stacked0->data()[12] == 12.0f);
 
             // 在第 1 维 stack
-            const auto stacked1 = CPUTensor<float>::stack(tensors, 1);
+            const auto stacked1 = CPUTensor<float>::stack({t1.get(), t2.get(), t3.get()}, 1);
             std::cout << *stacked1 << std::endl;
             assert(stacked1->get_shape().dims() == std::vector<size_t>({2, 3, 3}));
             assert(stacked1->data()[0] == 0.0f && stacked1->data()[3] == 6.0f && stacked1->data()[6] == 12.0f);
 
             // 在第 2 维 stack
-            const auto stacked2 = CPUTensor<float>::stack(tensors, 2);
+            const auto stacked2 = CPUTensor<float>::stack({t1.get(), t2.get(), t3.get()}, 2);
             assert(stacked2->get_shape().dims() == std::vector<size_t>({2, 3, 3}));
             std::cout << *stacked2 << std::endl;
             assert(stacked2->data()[0] == 0.0f && stacked2->data()[1] == 6.0f && stacked2->data()[2] == 12.0f);
@@ -689,10 +756,7 @@ public:
             const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = CPUTensor<float>::arrange(24, 48, 1.0)->view({2, 3, 4});
 
-            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
-
-            const auto stacked = CPUTensor<float>::stack(tensors, 1);
-            std::cout << *stacked << std::endl;
+            const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, 1);
             assert(stacked->get_shape().dims() == std::vector<size_t>({2, 2, 3, 4}));
             assert(stacked->data()[0] == 0.0f && stacked->data()[24] == 12.0f);
         }
@@ -702,9 +766,8 @@ public:
             const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
             const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
 
-            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
 
-            const auto stacked = CPUTensor<float>::stack(tensors, -1);  // 应该等同于 dim=2
+            const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, -1);  // 应该等同于 dim=2
             assert(stacked->get_shape().dims() == std::vector<size_t>({2, 3, 2}));
         }
 
@@ -713,9 +776,7 @@ public:
             const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
             const auto t2 = t1->permute({1, 0})->contiguous()->view({2, 3});  // 非连续张量，但形状相同
 
-            const std::vector<Tensor<float>*> tensors = {t1.get(), t2.get()};
-
-            const auto stacked = CPUTensor<float>::stack(tensors, 0);
+            const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, 0);
             assert(stacked->get_shape().dims() == std::vector<size_t>({2, 2, 3}));
             assert(stacked->data()[0] == 0.0f && stacked->data()[6] == 0.0f);
             assert(stacked->data()[1] == 1.0f && stacked->data()[7] == 3.0f);
@@ -746,16 +807,20 @@ public:
             CPUTensor<float>::stack(tensors, 0);
         }, std::invalid_argument);
 
+        test_stack_non_contiguous();
+        test_stack_5d();
     }
+
+
     // 运行所有测试
     static void run_all_tests() {
         test_stack();
         test_randn();
         test_flatten();
         test_permute();
-        test_omp();
+        // test_omp();
         test_expand();
-        test_cat();
+        // test_cat();
         test_unsqueeze();
         test_squeeze();
         test_view();

@@ -120,10 +120,13 @@ private:
     bool Tensor<T>::is_contiguous_in_range(const int start_dim,int end_dim) const{
         const auto& shape = get_shape().dims();
         const auto& strides = get_strides();
+        const auto& steps = get_steps();
         size_t expected_stride = 1;
         if(end_dim == -1) end_dim += shape.size();
+
         for (int i = end_dim; i >= start_dim; --i) {
             if (strides[i] == 0) return false;
+            if (steps[i] != 1 &&  steps[i] != -1) return false;
             if (strides[i] != expected_stride) {
                 return false;
             }

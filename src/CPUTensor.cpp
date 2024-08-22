@@ -1,7 +1,5 @@
 #include "CPUTensor.h"
 #include <stdexcept>
-#include "CPUTensorOps.h"
-#include <memory>
 
 namespace Breeze {
     template<typename T>
@@ -23,9 +21,9 @@ namespace Breeze {
 
     template<typename T>
     CPUTensor<T>::CPUTensor(const std::initializer_list<size_t> shape_size)
-    : Tensor<T>(Shape(std::vector<size_t>(shape_size)), Device::CPU),
+    : Tensor<T>(Shape(shape_size), Device::CPU),
       memory_block_(std::make_shared<TensorStorage<T, CPUDevice>>(this->get_shape().total_size())),
-      steps_(std::vector<int32_t>(this->get_shape().ndim(), 1)) {}
+      steps_(shape_size.size(), 1) {}
 
     template<typename T>
     CPUTensor<T>::CPUTensor(const CPUTensor& other)
@@ -847,85 +845,33 @@ namespace Breeze {
             throw std::invalid_argument("No tensors provided for stacking");
         }
 
-        const int32_t input_ndim = tensors[0]->get_shape().ndim();
-        const int32_t output_ndim = input_ndim + 1;
-
-        // 调整 dim，允许它在 [0, input_ndim] 范围内
-        if (dim < 0) {
-            dim += output_ndim;
-        }
-
-        if (dim < 0 || dim > input_ndim) {
-            throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)",
-                                                      -output_ndim, input_ndim, dim));
-        }
-
-        // 检查所有输入张量的形状是否相同
-        for (size_t i = 1; i < tensors.size(); ++i) {
-            if (tensors[i]->get_shape() != tensors[0]->get_shape()) {
+        const int32_t ndim = tensors[0]->get_shape().ndim();
+        for (int32_t i = 0; i < tensors.size(); ++i) {
+            if (const auto& tensor = tensors[i]; tensor->get_shape() != tensors[0]->get_shape()) {
                 throw std::invalid_argument(Utils::Format("stack expects each tensor to be equal size, but got %s at entry %d and %s at entry %d",
-                                                          tensors[0]->get_shape().dims_str().c_str(), 0, tensors[i]->get_shape().dims_str().c_str(), i));
+                                                          tensors[0]->get_shape().dims_str().c_str(), 0, tensor->get_shape().dims_str().c_str(), i));
             }
+        }
+
+        if (dim < 0) {
+            dim += ndim + 1;  // +1 because we're adding a new dimension
+        }
+
+        if (dim < 0 || dim > ndim) {
+            throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d],"
+                                                      " but got %d)", -ndim, ndim -1, dim));
         }
 
         // 计算新的形状
         std::vector<size_t> new_shape = tensors[0]->get_shape().dims();
+
         new_shape.insert(new_shape.begin() + dim, tensors.size());
 
         // 创建结果张量
-        auto result = std::make_shared<CPUTensor<T>>(new_shape);
-        T* result_data = result->data();
+        auto result = std::make_shared<CPUTensor>(new_shape);
 
-        // 计算每个输入张量在结果中占据的元素数量
-        size_t elements_per_tensor = 1;
-        for (size_t i = dim + 1; i < new_shape.size(); ++i) {
-            elements_per_tensor *= new_shape[i];
-        }
-
-        // 计算外层循环的次数和步长
-        std::vector<size_t> outer_steps(dim);
-        size_t outer_iterations = 1;
-        for (int i = 0; i < dim; ++i) {
-            outer_steps[i] = outer_iterations;
-            outer_iterations *= new_shape[i];
-        }
-
-        // 执行stack操作
-        for (size_t outer = 0; outer < outer_iterations; ++outer) {
-            for (size_t t = 0; t < tensors.size(); ++t) {
-                const auto& tensor = tensors[t];
-                const T* src_data = tensor->data();
-                const std::vector<size_t>& src_shape = tensor->get_shape().dims();
-                const std::vector<size_t>& src_strides = tensor->get_strides();
-                const std::vector<int32_t>& src_steps = tensor->get_steps();
-
-                size_t src_offset = 0;
-                for (int32_t d = 0; d < dim; ++d) {
-                    const size_t idx = (outer / outer_steps[d]) % new_shape[d];
-                    src_offset += idx * src_strides[d] * src_steps[d];
-                }
-
-                size_t dst_offset = (outer * tensors.size() + t) * elements_per_tensor;
-
-                if (tensor->is_contiguous() && result->is_contiguous()) {
-                    // 使用 memcpy 进行连续内存的复制
-                    std::memcpy(result_data + dst_offset, src_data + src_offset, elements_per_tensor * sizeof(T));
-                } else {
-                    // 对于非连续存储，我们使用逐元素复制
-                    for (size_t i = 0; i < elements_per_tensor; ++i) {
-                        size_t src_idx = src_offset;
-                        size_t dst_idx = dst_offset + i;
-                        size_t remaining = i;
-                        for (int d = input_ndim - 1; d >= dim; --d) {
-                            size_t coord = remaining % src_shape[d];
-                            remaining /= src_shape[d];
-                            src_idx += coord * src_strides[d] * src_steps[d];
-                        }
-                        result_data[dst_idx] = src_data[src_idx];
-                    }
-                }
-            }
-        }
+        // 在视图上执行cat操作
+        cat_out(tensors, dim, result.get());
 
         return result;
     }
@@ -973,70 +919,77 @@ namespace Breeze {
         if (tensors.empty()) {throw std::invalid_argument("No tensors provided for concatenation");}
 
         const int32_t ndim = tensors[0]->get_shape().ndim();
-        const std::vector<size_t>& new_shape = tensors[0]->get_shape().dims();
+        const std::vector<size_t>& new_shape = result->get_shape().dims();
         T* result_data = result->data();
 
-        // 计算每次复制的块大小（不包括最后一维）
-        size_t block_size = 1;
-        for (int32_t i = dim; i < ndim -1; ++i) {
-            block_size *= new_shape[i];
-        }
-
         // 最后一维的大小
-        const size_t last_dim_size = new_shape[ndim - 1];
+        const size_t last_dim_size = dim >= ndim ? 1 : tensors[0]->get_shape().dims()[ndim - 1];
 
         // 计算外层循环的次数和步长
         std::vector<size_t> outer_steps(dim);
         size_t outer_iterations = 1;
         for (int i = 0; i < dim; ++i) {
             outer_steps[i] = outer_iterations;
-            outer_iterations *= new_shape[i];
+            outer_iterations *= tensors[0]->get_shape().dims()[i];
+        }
+
+        size_t block_size = 1;
+
+        for (int32_t s = dim + 1; s < ndim -1; ++s) {
+            block_size *=  tensors[0]->get_shape().dims()[s];
         }
 
         int32_t result_offset = 0;
         for (size_t i = 0; i < outer_iterations; ++i) {
             for (const auto& tensor : tensors) {
-                int32_t src_offset = static_cast<CPUTensor*>(tensor)->offset_;
-                const T* src_data = tensor->data();
-                const std::vector<size_t>& src_shape = tensor->get_shape().dims();
-                const std::vector<size_t>& src_strides = tensor->get_strides();
-                const std::vector<int32_t>& src_steps = tensor->get_steps();
+                auto _block_size = block_size;
+                // 计算每次复制的块大小（不包括最后一维 和）
+                const auto src_tensor = static_cast<CPUTensor*>(tensor);
+                int32_t src_offset = src_tensor->offset_;
+                const T* src_data = src_tensor->data();
+                const std::vector<size_t>& src_strides = src_tensor->get_strides();
+                const std::vector<int32_t>& src_steps = src_tensor->get_steps();
+                const std::vector<size_t>& src_shape = src_tensor->get_shape().dims();
+                if(dim <= src_shape.size() -2 )_block_size *= src_shape[dim];
 
-                for (int32_t d = 0; d < dim; ++d) {
-                    const size_t idx = (i / outer_steps[d]) % result->get_shape().dims()[d];
-                    src_offset += idx * src_strides[d] * src_steps[d];
+                size_t remaining = i;
+                for (int32_t d = dim - 1; d >= 0 && remaining > 0; --d) {
+                    src_offset += (remaining % src_shape[d]) * src_strides[d] * src_steps[d];
+                    remaining /= src_shape[d];
                 }
-
-                if (dim != ndim && tensor->is_contiguous() && result->is_contiguous()) {
+                if (src_tensor->is_contiguous() && result->is_contiguous()) {
                     // 使用 memcpy 进行连续内存的复制
-                    const size_t copy_size = block_size * last_dim_size;
+                    const size_t copy_size = _block_size * last_dim_size;
                     std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(T));
                     result_offset += copy_size;
                 } else {
                     // 对于非连续存储，我们使用 BLAS 复制最后一维
-                    for (size_t j = 0; j < block_size; ++j) {
+                    for (size_t j = 0; j < _block_size; ++j) {
                         int32_t current_src_offset = src_offset, dst_offset = result_offset;
-                        auto idx = j;
-                        for (int d = std::max(ndim - 2, 0); d >= dim; --d) {
-                            size_t coord = idx % src_shape[d];
-                            idx /= src_shape[d];
-                            current_src_offset += coord * src_strides[d] * src_steps[d];
-                            dst_offset += coord * result->get_strides()[d];
+                        remaining = j;
+                        for (int32_t d = new_shape.size() - 2; d >= dim&& d >= 0; --d) {
+                            dst_offset += (remaining % new_shape[d]) * result->get_strides()[d];
+                            remaining /= new_shape[d];
                         }
-                        int32_t incrX = src_strides[ndim-1] * src_steps[ndim-1];
+                        remaining = j;
+                        for (int32_t d = src_shape.size() - 2; d >= dim; --d) {
+                            current_src_offset += (remaining % src_shape[d]) * src_strides[d] * src_steps[d];
+                            remaining /= src_shape[d];
+                        }
                         if constexpr (std::is_same_v<T, float>) {
-                            cblas_scopy(last_dim_size, src_data + current_src_offset, incrX,
+                            cblas_scopy(last_dim_size, src_data + current_src_offset, src_strides[ndim-1] * src_steps[ndim-1],
                                         result_data + dst_offset, 1);
                         } else if constexpr (std::is_same_v<T, double>) {
-                            cblas_dcopy(last_dim_size, src_data + current_src_offset, incrX,
+                            cblas_dcopy(last_dim_size, src_data + current_src_offset, src_strides[ndim-1] * src_steps[ndim-1],
                                         result_data + dst_offset, 1);
                         } else {
+                            #pragma omp parallel for
                             for (size_t k = 0; k < last_dim_size; ++k) {
-                                result_data[dst_offset + k] = src_data[current_src_offset + k * incrX];
+                                result_data[dst_offset + k] = src_data[current_src_offset + k * src_strides[ndim-1] * src_steps[ndim-1]];
                             }
                         }
                     }
-                    result_offset += block_size * last_dim_size;
+                    result_offset += _block_size * last_dim_size;
                 }
             }
         }
