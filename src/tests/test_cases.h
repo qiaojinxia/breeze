@@ -260,90 +260,187 @@ public:
     }
 
     static void test_cat() {
-        // 0维度标量拼接（应报错）
-        try {
+        // 基本测试
+        {
+            // 创建初始张量
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            // t1 现在是:
+            // 0, 1, 2
+            // 3, 4, 5
+
+            // 创建 t2，与 t1 形状相同
+            const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
+            // t2 现在是:
+            // 6, 7, 8
+            // 9, 10, 11
+
+            // 在第0维度上拼接
+            const auto cat_dim0 = CPUTensor<float>::cat({t1.get(), t2.get()}, 0);
+            assert(cat_dim0->get_shape().dims() == std::vector<size_t>({4, 3}));
+            std::vector<float> expected_dim0 = {
+                0.0f, 1.0f, 2.0f,
+                3.0f, 4.0f, 5.0f,
+                6.0f, 7.0f, 8.0f,
+                9.0f, 10.0f, 11.0f
+            };
+            for (size_t i = 0; i < expected_dim0.size(); ++i) {
+                assert(std::abs(cat_dim0->data()[i] - expected_dim0[i]) < 1e-6f);
+            }
+
+            // 在第1维度上拼接
+            const auto cat_dim1 = CPUTensor<float>::cat({t1.get(), t2.get()}, 1);
+            assert(cat_dim1->get_shape().dims() == std::vector<size_t>({2, 6}));
+            std::vector<float> expected_dim1 = {
+                0.0f, 1.0f, 2.0f, 6.0f, 7.0f, 8.0f,
+                3.0f, 4.0f, 5.0f, 9.0f, 10.0f, 11.0f
+            };
+            for (size_t i = 0; i < expected_dim1.size(); ++i) {
+                assert(std::abs(cat_dim1->data()[i] - expected_dim1[i]) < 1e-6f);
+            }
+
+            // 测试非连续张量
+            const auto t3 = t1->permute({1, 0})->contiguous();  // t3 是 3x2
+            const auto t4 = t2->permute({1, 0})->contiguous();  // t4 也是 3x2
+
+            // 在第1维度上拼接非连续张量
+            const auto cat_non_contiguous = CPUTensor<float>::cat({t3.get(), t4.get()}, 1);
+            assert(cat_non_contiguous->get_shape().dims() == std::vector<size_t>({3, 4}));
+            std::vector<float> expected_non_contiguous = {
+                0.0f, 3.0f, 6.0f, 9.0f,
+                1.0f, 4.0f, 7.0f, 10.0f,
+                2.0f, 5.0f, 8.0f, 11.0f
+            };
+            for (size_t i = 0; i < expected_non_contiguous.size(); ++i) {
+                assert(std::abs(cat_non_contiguous->data()[i] - expected_non_contiguous[i]) < 1e-6f);
+            }
+        }
+
+        // 1D张量拼接测试
+        {
+            const auto t1 = CPUTensor<float>::arange(0, 3, 1.0);
+            const auto t2 = CPUTensor<float>::arange(3, 6, 1.0);
+
+            const auto cat_1d = CPUTensor<float>::cat({t1.get(), t2.get()}, 0);
+            assert(cat_1d->get_shape().dims() == std::vector<size_t>({6}));
+            for (int i = 0; i < 6; ++i) {
+                assert(cat_1d->data()[i] == static_cast<float>(i));
+            }
+        }
+
+        // 3D张量拼接测试
+        {
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = CPUTensor<float>::arange(24, 48, 1.0)->view({2, 3, 4});
+
+            // 在第0维度上拼接
+            const auto cat_3d_dim0 = CPUTensor<float>::cat({t1.get(), t2.get()}, 0);
+            assert(cat_3d_dim0->get_shape().dims() == std::vector<size_t>({4, 3, 4}));
+
+            // 在第1维度上拼接
+            const auto cat_3d_dim1 = CPUTensor<float>::cat({t1.get(), t2.get()}, 1);
+            assert(cat_3d_dim1->get_shape().dims() == std::vector<size_t>({2, 6, 4}));
+
+            // 在第2维度上拼接
+            const auto cat_3d_dim2 = CPUTensor<float>::cat({t1.get(), t2.get()}, 2);
+            assert(cat_3d_dim2->get_shape().dims() == std::vector<size_t>({2, 3, 8}));
+        }
+        // 2D张量拼接测试
+        {
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(0, 4, 1.0)->view({2, 2});  // 形状不匹配
+            const auto cat_2d_dim1 = CPUTensor<float>::cat({t1.get(), t2.get()}, 1);
+            assert(cat_2d_dim1->get_shape().dims() == std::vector<size_t>({2, 5}));
+            std::cout << *cat_2d_dim1 << std::endl;
+            assert(cat_2d_dim1->data()[0] == 0.0f && cat_2d_dim1->data()[1] == 1.0f && cat_2d_dim1->data()[2] == 2.0f
+                && cat_2d_dim1->data()[3] == 0.0f && cat_2d_dim1->data()[4] == 1.0f);
+
+            assert(cat_2d_dim1->data()[5] == 3.0f && cat_2d_dim1->data()[6] == 4.0f && cat_2d_dim1->data()[7] == 5.0f
+                       && cat_2d_dim1->data()[8] == 2.0f && cat_2d_dim1->data()[9] == 3.0f);
+        }
+
+        //错误处理测试
+        ASSERT_THROWS({
+          const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+          const auto t2 = CPUTensor<float>::arange(0, 6, 1.0)->view({3, 2});  // 完全不同的形状
+          CPUTensor<float>::cat({t1.get(), t2.get()}, 1);  // 这里应该抛出异常
+      }, std::invalid_argument);
+
+        ASSERT_THROWS({
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
+
+            CPUTensor<float>::cat({t1.get(), t2.get()}, 3);  // 无效的维度
+        }, std::invalid_argument);
+
+        ASSERT_THROWS({
+            std::vector<Tensor<float>*> tensors;  // 空向量
+            CPUTensor<float>::cat(tensors, 0);
+        }, std::invalid_argument);
+
+        // 标量拼接测试（应报错）
+        ASSERT_THROWS({
             CPUTensor<float> scalar1({});
             scalar1.fill(2.0);
             CPUTensor<float> scalar2({});
             scalar2.fill(1.0);
-            const auto cat_scalar = CPUTensor<float>::cat({&scalar1, &scalar2}, 0);
-            assert(false && "Expected cat to throw an exception for scalars.");
-        } catch (const std::invalid_argument& e) {
-            std::cout << "Success test case: "  << std::endl;
+            CPUTensor<float>::cat({&scalar1, &scalar2}, 0);
+        }, std::invalid_argument);
+
+
+        {
+            // n维度非连续拼接
+            CPUTensor<float> tensor3d_1({2, 3, 4}, 1.0);
+            CPUTensor<float> tensor3d_2({2, 3, 4}, 2.0);
+
+            // Slice to create non-contiguous tensors
+            const auto sliced_tensor1 = tensor3d_1.slice({"0:2", "1:3"});
+            const auto sliced_tensor2 = tensor3d_2.slice({"0:2", "1:3"});
+            // Concatenate along a specific axis
+            const auto cat_non_contiguous = CPUTensor<float>::cat({sliced_tensor1.get(), sliced_tensor2.get()}, 1);
+            // Check the shape
+            assert(cat_non_contiguous->get_shape().dims() == std::vector<size_t>({2, 4, 4}));
+            std::vector<std::vector<float>> expected = {
+                {1., 1., 1., 1.},
+                {1., 1., 1., 1.},
+                {2., 2., 2., 2.},
+                {2., 2., 2., 2.},
+                {1., 1., 1., 1.},
+                {1., 1., 1., 1.},
+                {2., 2., 2., 2.},
+                {2., 2., 2., 2.}
+            };
+            COMPARE_TENSOR_DATA(cat_non_contiguous->data(),expected, 1e-6);
         }
 
-        // 1维度拼接
-        CPUTensor<float> tensor1d_1({3});
-        tensor1d_1.fill(2.0);
-        CPUTensor<float> tensor1d_2({3});
-        tensor1d_2.fill(1.0);
-        const auto cat_1d = CPUTensor<float>::cat({&tensor1d_1, &tensor1d_2}, 0);
-        assert(cat_1d->get_shape().dims() == std::vector<size_t>({6}));
-        std::cout << "1D tensor cat result: ";
-        print_shape(cat_1d->get_shape().dims());
-        std::cout << std::endl;
+        {
+            // Create a 1D tensor
+            CPUTensor<float> tensor1d({6});
+            for (int i = 0; i < 6; ++i) {
+                tensor1d.set_value({static_cast<size_t>(i)}, static_cast<float>(i));
+            }
+            // Slice to create non-contiguous tensors (e.g., take every other element)
+            const auto sliced_tensor3 = tensor1d.slice({"5:-1:-2"}); // [5, 3, 1]
+            const auto sliced_tensor4 = tensor1d.slice({"4:-1:-2"}); // [6, 4, 2]
 
-        // n维度连续拼接
-        CPUTensor<float> tensor2d_1({2, 2});
-        tensor2d_1.fill(3.0);
-        CPUTensor<float> tensor2d_2({2, 2});
-        tensor2d_2.fill(4.0);
-        const auto cat_2d = CPUTensor<float>::cat({&tensor2d_1, &tensor2d_2}, 0);
-        assert(cat_2d->get_shape().dims() == std::vector<size_t>({4, 2}));
-        std::cout << "2D tensor cat result: ";
-        print_shape(cat_2d->get_shape().dims());
-        std::cout << std::endl;
+            // Concatenate the slices
+            const auto cat_non_contiguous_1d = CPUTensor<float>::cat({sliced_tensor3.get(), sliced_tensor4.get()}, 0);
 
-        // n维度非连续拼接
-        CPUTensor<float> tensor3d_1({2, 3, 4});
-        tensor3d_1.fill(1.0);
+            // Check the shape
+            assert(cat_non_contiguous_1d->get_shape().dims() == std::vector<size_t>({6}));
 
-        CPUTensor<float> tensor3d_2({2, 3, 4});
-        tensor3d_2.fill(2.0);
-
-        // Slice to create non-contiguous tensors
-        const auto sliced_tensor1 = tensor3d_1.slice({"0:2", "1:3"});
-        const auto sliced_tensor2 = tensor3d_2.slice({"0:2", "1:3"});
-
-        // Concatenate along a specific axis
-        const auto cat_non_contiguous = CPUTensor<float>::cat({sliced_tensor1.get(), sliced_tensor2.get()}, 1);
-
-        // Check the shape
-        assert(cat_non_contiguous->get_shape().dims() == std::vector<size_t>({2, 4, 4}));
-        std::cout << "High-dimensional non-contiguous tensor cat result: ";
-        print_shape(cat_non_contiguous->get_shape().dims());
-        std::cout << std::endl;
-        std::cout << *cat_non_contiguous << std::endl;
-
-
-        // Create a 1D tensor
-        CPUTensor<float> tensor1d({6});
-        for (int i = 0; i < 6; ++i) {
-            tensor1d.set_value({static_cast<size_t>(i)}, static_cast<float>(i));
+            std::vector<std::vector<float>> expected = {
+                {5., 3., 1., 4. ,2. ,0.},
+            };
+            std::cout << *cat_non_contiguous_1d << std::endl;
+            COMPARE_TENSOR_DATA(cat_non_contiguous_1d->data(),expected, 1e-6);
         }
-        // Slice to create non-contiguous tensors (e.g., take every other element)
-        const auto sliced_tensor3 = tensor1d.slice({"5:-1:-2"}); // [5, 3, 1]
-        const auto sliced_tensor4 = tensor1d.slice({"4:-1:-2"}); // [6, 4, 2]
-
-        std::cout << *sliced_tensor3 << std::endl;
-        std::cout << *sliced_tensor4 << std::endl;
-
-        // Concatenate the slices
-        const auto cat_non_contiguous_1d = CPUTensor<float>::cat({sliced_tensor3.get(), sliced_tensor4.get()}, 0);
-
-        // Check the shape
-        assert(cat_non_contiguous_1d->get_shape().dims() == std::vector<size_t>({6}));
-        std::cout << "1D non-contiguous tensor cat result: ";
-        print_shape(cat_non_contiguous_1d->get_shape().dims());
-        std::cout << std::endl;
-
-        std::cout << *cat_non_contiguous_1d << std::endl;
+        std::cout << "All cat tests passed successfully!" << std::endl;
     }
 
 
     static void test_clone() {
         // 1维度拼接
-        const auto tensor1 = CPUTensor<float>::arrange(0,20,1);
+        const auto tensor1 = CPUTensor<float>::arange(0,20,1);
         std::cout << *tensor1 << std::endl;
         const auto tensor1_slice = tensor1->slice({"20:10:-2"});
         std::cout << *tensor1_slice << std::endl;
@@ -368,7 +465,7 @@ public:
 
     static void test_transpose() {
         // Transpose a 2D tensor
-        auto tensor2d = CPUTensor<float>::arrange(0,12,1.0)->view({3,4});
+        auto tensor2d = CPUTensor<float>::arange(0,12,1.0)->view({3,4});
         const auto transposed_2d = tensor2d->transpose(0, 1);
         std::cout << *transposed_2d << std::endl;
         assert(transposed_2d->get_shape().dims() == std::vector<size_t>({4, 3}));
@@ -416,7 +513,7 @@ public:
 
     static void test_omp() {
         // MEASURE_TIME(auto  a1 = CPUTensor<float>::arrange(1,100000000,1.0););
-        const auto a1 = CPUTensor<float>::arrange(1,10000000,1.0)->expand({250,-1})->slice({":","::2"});
+        const auto a1 = CPUTensor<float>::arange(1,10000000,1.0)->expand({250,-1})->slice({":","::2"});
         // MEASURE_TIME(auto x = a1->clone());
         const auto x = a1->clone();
         const auto data_bytes = x->n_bytes();
@@ -427,7 +524,7 @@ public:
     static void test_permute() {
       {
 
-          const auto t1 = CPUTensor<float>::arrange(0,24,1.0)->view({2,3,4});
+          const auto t1 = CPUTensor<float>::arange(0,24,1.0)->view({2,3,4});
           std::cout << *t1  << std::endl;
           const auto t2 = t1 ->permute({-1,-2,-3});
           std::cout << *t2  << std::endl;
@@ -440,7 +537,7 @@ public:
 
             // 基本的维度重排测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             std::cout << *t1 << std::endl;
             const auto t2 = t1->permute({2, 0, 1});
             std::cout << *t2 << std::endl;
@@ -453,14 +550,14 @@ public:
 
         // 负数维度测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({-1, -3, -2});
             assert(t2->get_shape().dims() == std::vector<size_t>({4, 2, 3}));
         }
 
         // 恒等置换测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({0, 1, 2});
             assert(t2->get_shape().dims() == t1->get_shape().dims());
             assert(t2->get_strides() == t1->get_strides());
@@ -468,7 +565,7 @@ public:
 
         // 一维张量测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 5, 1.0);
+            const auto t1 = CPUTensor<float>::arange(0, 5, 1.0);
             const auto t2 = t1->permute({0});
             assert(t2->get_shape().dims() == t1->get_shape().dims());
             assert(t2->get_strides() == t1->get_strides());
@@ -476,7 +573,7 @@ public:
 
         // 高维张量测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 120, 1.0)->view({2, 3, 4, 5});
+            const auto t1 = CPUTensor<float>::arange(0, 120, 1.0)->view({2, 3, 4, 5});
             const auto t2 = t1->permute({3, 1, 2, 0});
             assert(t2->get_shape().dims() == std::vector<size_t>({5, 3, 4, 2}));
         }
@@ -484,31 +581,31 @@ public:
 
         // 维度不匹配错误测试
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({0, 1});
         }, std::invalid_argument);
 
         // 无效维度错误测试
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({0, 1, 3});
         }, std::out_of_range);
 
         // 重复维度错误测试
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({0, 1, 1});
         }, std::invalid_argument);
 
         // 大的负数维度错误测试
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({0, 1, -4});
         }, std::out_of_range);
 
         // 数据共享测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({2, 0, 1});
             t1->data()[0] = 100.0f;
             assert(t2->data()[0] == 100.0f);
@@ -516,7 +613,7 @@ public:
 
         // contiguous 测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             const auto t2 = t1->permute({2, 1, 0});
             const auto t3 = t2->contiguous();
             assert(t3->get_shape().dims() == std::vector<size_t>({4, 3, 2}));
@@ -526,7 +623,7 @@ public:
 
         // 一维张量的 -1 维度测试
       {
-          const auto t1 = CPUTensor<float>::arrange(0, 1, 1.0);
+          const auto t1 = CPUTensor<float>::arange(0, 1, 1.0);
           const auto t2 = t1->permute({-1});
           // 这里不应该抛出异常，因为对一维张量使用 -1 是有效的
           assert(t1->get_shape().dims() == t2->get_shape().dims());
@@ -534,7 +631,7 @@ public:
 
       {
           // 创建一个 2x3x1 的张量
-          auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3, 1});
+          auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3, 1});
           std::cout << "Original tensor:" << *t1 << std::endl;
 
           // 扩展到 2x3x4
@@ -581,7 +678,7 @@ public:
     static void test_flatten() {
         {
             // 创建一个连续的 2x3x4 张量
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
             std::cout << "Original tensor:" << std::endl;
             std::cout << *t1 << std::endl;
 
@@ -709,9 +806,9 @@ public:
 
 
     static void test_stack_non_contiguous() {
-        const auto t1 = CPUTensor<float>::arrange(0,128,1)->view({2,8,8})->slice({":",":","::2"});
-        const auto t2 = CPUTensor<float>::arrange(128,256,1)->view({2,8,8})->slice({":",":","::2"});
-        const auto t3 = CPUTensor<float>::arrange(256,384,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto t1 = CPUTensor<float>::arange(0,128,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto t2 = CPUTensor<float>::arange(128,256,1)->view({2,8,8})->slice({":",":","::2"});
+        const auto t3 = CPUTensor<float>::arange(256,384,1)->view({2,8,8})->slice({":",":","::2"});
         const auto stacked0 = CPUTensor<float>::stack({t1.get(),t2.get(),t3.get()}, 1);
         assert(stacked0->get_shape().dims() == std::vector<size_t>({2, 3, 8, 4  }));
         assert(stacked0->data()[0] == 0.0f && stacked0->data()[1] == 2.0f && stacked0->data()[2] == 4.0f && stacked0->data()[3] == 6.0f);
@@ -729,9 +826,9 @@ public:
     static void test_stack(){
         // 基本 stack 操作测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
-            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
-            const auto t3 = CPUTensor<float>::arrange(12, 18, 1.0)->view({2, 3});
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
+            const auto t3 = CPUTensor<float>::arange(12, 18, 1.0)->view({2, 3});
 
             // 在第 0 维 stack
             const auto stacked0 = CPUTensor<float>::stack({t1.get(), t2.get(), t3.get()}, 0);
@@ -753,8 +850,8 @@ public:
 
         // 高维张量 stack 测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 24, 1.0)->view({2, 3, 4});
-            const auto t2 = CPUTensor<float>::arrange(24, 48, 1.0)->view({2, 3, 4});
+            const auto t1 = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
+            const auto t2 = CPUTensor<float>::arange(24, 48, 1.0)->view({2, 3, 4});
 
             const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, 1);
             assert(stacked->get_shape().dims() == std::vector<size_t>({2, 2, 3, 4}));
@@ -763,8 +860,8 @@ public:
 
         // 负数维度测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
-            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
 
 
             const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, -1);  // 应该等同于 dim=2
@@ -773,7 +870,7 @@ public:
 
         // 非连续张量测试
         {
-            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
             const auto t2 = t1->permute({1, 0})->contiguous()->view({2, 3});  // 非连续张量，但形状相同
 
             const auto stacked = CPUTensor<float>::stack({t1.get(), t2.get()}, 0);
@@ -788,15 +885,15 @@ public:
 
         // 错误处理测试
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
-            const auto t2 = CPUTensor<float>::arrange(0, 4, 1.0)->view({2, 2});  // 形状不匹配
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(0, 4, 1.0)->view({2, 2});  // 形状不匹配
 
             CPUTensor<float>::stack({t1.get(), t2.get()}, 0);
         }, std::invalid_argument);
 
         ASSERT_THROWS({
-            const auto t1 = CPUTensor<float>::arrange(0, 6, 1.0)->view({2, 3});
-            const auto t2 = CPUTensor<float>::arrange(6, 12, 1.0)->view({2, 3});
+            const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
+            const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
 
 
             CPUTensor<float>::stack({t1.get(), t2.get()}, 3);  // 无效的维度
@@ -820,7 +917,7 @@ public:
         test_permute();
         // test_omp();
         test_expand();
-        // test_cat();
+        test_cat();
         test_unsqueeze();
         test_squeeze();
         test_view();
@@ -831,8 +928,6 @@ public:
         std::cout << "All tests passed!" << std::endl;
     }
 };
-
-
 
 
 #endif //TEST_SQUEEZE_H

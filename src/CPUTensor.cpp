@@ -18,7 +18,6 @@ namespace Breeze {
         steps_ = std::vector<int32_t>(this->get_shape().ndim(), 1);
     }
 
-
     template<typename T>
     CPUTensor<T>::CPUTensor(const std::initializer_list<size_t> shape_size)
     : Tensor<T>(Shape(shape_size), Device::CPU),
@@ -53,7 +52,7 @@ namespace Breeze {
     CPUTensor<T>::CPUTensor()
         : Tensor<T>(Shape{}, Device::CPU),
           memory_block_(std::make_shared<TensorStorage<T, CPUDevice>>(1)),
-          steps_(std::vector<int32_t>{1}) {}
+          steps_({1}) {}
 
     template<typename T>
     CPUTensor<T>::CPUTensor(std::shared_ptr<TensorStorage<T, CPUDevice>> data,
@@ -609,7 +608,7 @@ namespace Breeze {
         }
 
         const size_t copy_size = src_shape.back();
-        const int32_t src_stride = src_strides[ndim-1] * src_steps[ndim-1];
+        const int32_t src_inc_step = src_strides[ndim-1] * src_steps[ndim-1];
 
         #pragma omp parallel for if(outer_dim > 1024)
         for (size_t i = 0; i < outer_dim; ++i) {
@@ -624,15 +623,15 @@ namespace Breeze {
                 dst_offset += _idx_ * dst_strides[j];
             }
             //blas 负索引 计算方式还是按照 开始位置 和我们通过末尾方式实现不同 需要转换下
-            int32_t src_blas_offset = src_stride < 0 ? src_offset + (copy_size -1) * src_stride : src_offset;
+            int32_t src_blas_offset = src_inc_step < 0 ? src_offset + (copy_size -1) * src_inc_step : src_offset;
             if constexpr (std::is_same_v<T, float>) {
-                cblas_scopy(copy_size, src_data + src_blas_offset, src_stride, dst_data + dst_offset, 1);
+                cblas_scopy(copy_size, src_data + src_blas_offset, src_inc_step, dst_data + dst_offset, 1);
             } else if constexpr (std::is_same_v<T, double>) {
-                cblas_dcopy(copy_size, src_data + src_blas_offset, src_stride, dst_data + dst_offset, 1);
+                cblas_dcopy(copy_size, src_data + src_blas_offset, src_inc_step, dst_data + dst_offset, 1);
             } else {
                 // 对于其他类型，手动复制以确保正确处理不连续的情况
                 for (size_t j = 0; j < copy_size; ++j) {
-                    dst_data[dst_offset + j] = src_data[src_offset + j * src_stride];
+                    dst_data[dst_offset + j] = src_data[src_offset + j * src_inc_step];
                 }
             }
         }
@@ -819,16 +818,25 @@ namespace Breeze {
     }
 
     template <typename T>
-    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arrange(const T  begin,const T end,const T step ) {
-        const auto m_size = static_cast<size_t>((end - begin) /  step);
-        auto tensor = std::make_shared<CPUTensor>(Shape{m_size});
-        #pragma omp parallel for
-        for(size_t i = 0; i< tensor->get_shape().total_size(); ++i) {
-            auto data_ptr = tensor->data() + i;
-            *data_ptr = begin + i * step;
+    std::shared_ptr<CPUTensor<T>> CPUTensor<T>::arange(const T  start,const T end,const T step ) {
+        if (step == 0) {
+            throw std::invalid_argument("step must be non-zero");
         }
+        if ((step > 0 && start >= end) || (step < 0 && start <= end)) {
+            throw std::invalid_argument("invalid range");
+        }
+
+        const auto size = static_cast<size_t>(std::ceil((end - start) / step));
+        auto tensor = std::make_shared<CPUTensor>(Shape{size});
+
+        #pragma omp parallel for if(size > 16777216)
+        for (size_t i = 0; i < size; ++i) {
+            tensor->data()[i] = start + i * step;
+        }
+
         return tensor;
     }
+
     template <typename T>
     std::shared_ptr<CPUTensor<T>> CPUTensor<T>::scalar(const T value) {
         return std::make_shared<CPUTensor>(Shape(),value);
@@ -853,9 +861,7 @@ namespace Breeze {
             }
         }
 
-        if (dim < 0) {
-            dim += ndim + 1;  // +1 because we're adding a new dimension
-        }
+        if (dim < 0) {dim += ndim + 1;} // +1 because we're adding a new dimension
 
         if (dim < 0 || dim > ndim) {
             throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d],"
@@ -871,7 +877,7 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor>(new_shape);
 
         // 在视图上执行cat操作
-        cat_out(tensors, dim, result.get());
+        combine_tensors_out(tensors, dim, result.get());
 
         return result;
     }
@@ -882,48 +888,52 @@ namespace Breeze {
             throw std::invalid_argument("No tensors provided for concatenation");
         }
 
-        int32_t ndim = tensors[0]->get_shape().ndim();
-        for (int32_t i = 0; i < tensors.size(); ++i) {
-            const auto& tensor = tensors[i];
-            // 标量没法拼接
-            if (tensor->get_shape().ndim() == 0) {
-                throw std::invalid_argument(Utils::Format("zero-dimensional tensor (at position %d) cannot be concatenated", i));
-            }
-            if (tensor->get_shape().ndim() != ndim) {
-                throw std::invalid_argument("All tensors must have the same number of dimensions");
-            }
+        if (tensors.size() == 1) {
+            return std::dynamic_pointer_cast<CPUTensor>(tensors[0]->contiguous());
         }
 
-        if (dim < 0) {dim += ndim;}
-        if (dim < 0 || dim >= ndim) {throw std::invalid_argument("Invalid dimension for concatenation");}
-
+        int32_t ndim = tensors[0]->get_shape().ndim();
         std::vector<size_t> new_shape = tensors[0]->get_shape().dims();
-        size_t concat_dim_size = 0;
-        for (const auto& tensor : tensors) {
-            concat_dim_size += tensor->get_shape().dims()[dim];
-            for (size_t i = 0; i < ndim; ++i) {
-                if (i != dim && tensor->get_shape().dims()[i] != new_shape[i]) {
-                    throw std::invalid_argument("Inconsistent tensor shapes");
+
+        if (dim < 0) {dim += ndim;}
+        if (dim < 0 || dim >= ndim) {
+            throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", -ndim, ndim-1, dim));
+        }
+
+        size_t concat_dim_size = new_shape[dim];
+
+        for (int32_t i= 1; i < tensors.size(); ++i) {
+            if (tensors[i]->get_shape().ndim() == 0) {
+                throw std::invalid_argument(Utils::Format("zero-dimensional tensor (at position %d) cannot be concatenated", i));
+            }
+
+            if (tensors[i]->get_shape().ndim() != ndim) {
+                throw std::invalid_argument(Utils::Format("Tensors must have same number of dimensions: got %d and %d", tensors[i]->get_shape().ndim(), ndim));
+            }
+
+            concat_dim_size += tensors[i]->get_shape().dims()[dim];
+            for (size_t j = 0; j < ndim; ++j) {
+                if (j != dim && tensors[i]->get_shape().dims()[j] != new_shape[j]) {
+                    throw std::invalid_argument(
+                        Utils::Format("Sizes of tensors must match except in dimension %d. Expected size %d but got size %d "
+                                      "for tensor number 1 in the list.", dim, new_shape[i], tensors[i]->get_shape().dims()[i], i));
                 }
             }
         }
+
         new_shape[dim] = concat_dim_size;
         auto result = std::make_shared<CPUTensor>(new_shape);
-        cat_out(tensors, dim, result.get());
+        combine_tensors_out(tensors, dim,result.get());
         return result;
     }
 
 
     template <typename T>
-    void CPUTensor<T>::cat_out(const std::vector<Tensor<T>*>& tensors,const int32_t dim, CPUTensor* result) {
+    void CPUTensor<T>::combine_tensors_out(const std::vector<Tensor<T>*>& tensors, const int32_t dim, CPUTensor* result) {
         if (tensors.empty()) {throw std::invalid_argument("No tensors provided for concatenation");}
-
         const int32_t ndim = tensors[0]->get_shape().ndim();
         const std::vector<size_t>& new_shape = result->get_shape().dims();
         T* result_data = result->data();
-
-        // 最后一维的大小
-        const size_t last_dim_size = dim >= ndim ? 1 : tensors[0]->get_shape().dims()[ndim - 1];
 
         // 计算外层循环的次数和步长
         std::vector<size_t> outer_steps(dim);
@@ -939,9 +949,12 @@ namespace Breeze {
             block_size *=  tensors[0]->get_shape().dims()[s];
         }
 
-        int32_t result_offset = 0;
+        size_t result_offset = 0;
         for (size_t i = 0; i < outer_iterations; ++i) {
             for (const auto& tensor : tensors) {
+                // 最后一维的大小 如果 dim是 最后一个维度也就是 按列 返回 1
+                size_t last_dim_size = dim >= ndim ? 1 : tensor->get_shape().dims()[ndim - 1];
+
                 auto _block_size = block_size;
                 // 计算每次复制的块大小（不包括最后一维 和）
                 const auto src_tensor = static_cast<CPUTensor*>(tensor);
@@ -950,7 +963,8 @@ namespace Breeze {
                 const std::vector<size_t>& src_strides = src_tensor->get_strides();
                 const std::vector<int32_t>& src_steps = src_tensor->get_steps();
                 const std::vector<size_t>& src_shape = src_tensor->get_shape().dims();
-                if(dim <= src_shape.size() -2 )_block_size *= src_shape[dim];
+
+                if(src_shape.size() >= 2 && dim <= src_shape.size() -2 ) _block_size *= src_shape[dim];
 
                 size_t remaining = i;
                 for (int32_t d = dim - 1; d >= 0 && remaining > 0; --d) {
@@ -961,40 +975,40 @@ namespace Breeze {
                     // 使用 memcpy 进行连续内存的复制
                     const size_t copy_size = _block_size * last_dim_size;
                     std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(T));
-                    result_offset += copy_size;
+                    result_offset += static_cast<int32_t>(copy_size);
                 } else {
                     // 对于非连续存储，我们使用 BLAS 复制最后一维
                     for (size_t j = 0; j < _block_size; ++j) {
-                        int32_t current_src_offset = src_offset, dst_offset = result_offset;
+                        size_t current_src_offset = src_offset, dst_offset = result_offset;
                         remaining = j;
-                        for (int32_t d = new_shape.size() - 2; d >= dim&& d >= 0; --d) {
+                        const auto current_dm = new_shape.size() - src_shape.size();
+
+                        for (int32_t d = new_shape.size() - 2; d >= dim; --d) {
                             dst_offset += (remaining % new_shape[d]) * result->get_strides()[d];
+                            if (d != dim)
+                                current_src_offset += (remaining % src_shape[d-current_dm]) * src_strides[d-current_dm] * src_steps[d-current_dm];
                             remaining /= new_shape[d];
                         }
-                        remaining = j;
-                        for (int32_t d = src_shape.size() - 2; d >= dim; --d) {
-                            current_src_offset += (remaining % src_shape[d]) * src_strides[d] * src_steps[d];
-                            remaining /= src_shape[d];
-                        }
-                        if constexpr (std::is_same_v<T, float>) {
-                            cblas_scopy(last_dim_size, src_data + current_src_offset, src_strides[ndim-1] * src_steps[ndim-1],
+                        const int32_t src_inc_step = src_strides[ndim-1] * src_steps[ndim-1];
+                        int32_t src_blas_offset = src_inc_step < 0 ? current_src_offset + (last_dim_size -1) * src_inc_step : current_src_offset;
+                        if constexpr (std::is_same_v<T, float>)  {
+                            cblas_scopy(last_dim_size, src_data + src_blas_offset, src_inc_step,
                                         result_data + dst_offset, 1);
                         } else if constexpr (std::is_same_v<T, double>) {
-                            cblas_dcopy(last_dim_size, src_data + current_src_offset, src_strides[ndim-1] * src_steps[ndim-1],
+                            cblas_dcopy(last_dim_size, src_data + src_blas_offset, src_inc_step,
                                         result_data + dst_offset, 1);
                         } else {
                             #pragma omp parallel for
                             for (size_t k = 0; k < last_dim_size; ++k) {
-                                result_data[dst_offset + k] = src_data[current_src_offset + k * src_strides[ndim-1] * src_steps[ndim-1]];
+                                result_data[dst_offset + k] = src_data[current_src_offset + k * src_inc_step];
                             }
                         }
                     }
-                    result_offset += _block_size * last_dim_size;
+                        result_offset += _block_size * last_dim_size;
+                    }
                 }
             }
         }
-    }
-
     // Explicit instantiation for common types
     template class CPUTensor<float>;
     template class CPUTensor<double>;

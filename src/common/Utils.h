@@ -95,7 +95,22 @@ public:
         return result;
     }
 
-
+    template<typename T>
+    static void compare_tensor_data(const T* tensor_data, const std::vector<std::vector<T>>& expected, float epsilon = 1e-6) {
+        size_t index = 0;
+        for (size_t i = 0; i < expected.size(); ++i) {
+            for (size_t j = 0; j < expected[i].size(); ++j) {
+                if (std::abs(tensor_data[index] - expected[i][j]) > epsilon) {
+                    std::ostringstream oss;
+                    oss << "Mismatch at position [" << i << "][" << j << "]: "
+                        << "Expected " << expected[i][j] << ", but got " << tensor_data[index];
+                    throw std::runtime_error(oss.str());
+                }
+                ++index;
+            }
+        }
+        std::cout << "Tensor data matches expected values." << std::endl;
+    }
 
 };
 

@@ -75,7 +75,7 @@ namespace Breeze {
         [[nodiscard]] std::vector<size_t> get_strides() const override;
         [[nodiscard]] size_t n_bytes() const override;
 
-        static std::shared_ptr<CPUTensor> arrange(T begin, T end, T step);
+        static std::shared_ptr<CPUTensor> arange(T start, T end, T step);
         static std::shared_ptr<CPUTensor> scalar(T value);
         static std::shared_ptr<CPUTensor> vector(size_t size);
     private:
@@ -83,7 +83,7 @@ namespace Breeze {
         size_t offset_ = 0;
         std::vector<int32_t> steps_;
         std::vector<size_t> strides_;
-        static void cat_out(const std::vector<Tensor<T>*>& tensors, int32_t dim, CPUTensor* result);
+        static void combine_tensors_out(const std::vector<Tensor<T>*>& tensors, int32_t dim, CPUTensor* result);
     };
 } // namespace Breeze
 

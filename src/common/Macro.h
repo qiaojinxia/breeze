@@ -30,4 +30,24 @@
     }                                                                    \
 } while (0)
 
+typedef int8_t QInt8;
+
+#define COMPARE_TENSOR_DATA(tensor_data, expected, epsilon) \
+do { \
+    size_t index = 0; \
+    for (size_t i = 0; i < expected.size(); ++i) { \
+        for (size_t j = 0; j < expected[i].size(); ++j) { \
+            if (std::abs(tensor_data[index] - expected[i][j]) > epsilon) { \
+                std::ostringstream oss; \
+                oss << "Mismatch at position [" << i << "][" << j << "]: " \
+                << "Expected " << expected[i][j] << ", but got " << tensor_data[index] \
+                << " in " << __FILE__ << " at line " << __LINE__; \
+                throw std::runtime_error(oss.str()); \
+            } \
+            ++index; \
+        } \
+    } \
+    std::cout << "Tensor data matches expected values." << std::endl; \
+} while(0)
+
 #endif //MACRO_H

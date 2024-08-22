@@ -89,7 +89,7 @@ target_compile_definitions(breeze PRIVATE
 
 )
 
-target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} "-mavx" )
+target_compile_options(breeze PRIVATE ${OpenMP_FLAGS} "-Dmavx" )
 
 
 # 设置包含目录
