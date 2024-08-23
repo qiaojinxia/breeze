@@ -45,6 +45,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<T>> permute(const std::vector<int32_t>& dims) override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> flatten() override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> flatten(int start_dim, int end_dim) override;
+        [[nodiscard]] std::shared_ptr<Tensor<T>> repeat(const std::vector<size_t>& repeats) const override;
 
         static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<T>*>& tensors, int32_t dim);
         static std::shared_ptr<CPUTensor> stack(const std::vector<Tensor<T>*>& tensors, int32_t dim);

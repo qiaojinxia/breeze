@@ -87,10 +87,22 @@ public:
             result.push_back(std::numeric_limits<int32_t>::max());
         }
 
-        // 处理默认值
-        if (result[0] == std::numeric_limits<int32_t>::max()) result[0] = 0;
-        if (result[1] == std::numeric_limits<int32_t>::max()) result[1] = dim_size;
+        // 处理步长
         if (result[2] == std::numeric_limits<int32_t>::max()) result[2] = 1;
+
+        // 处理起始和结束索引
+        if (result[2] > 0) {
+            // 正步长
+            if (result[0] == std::numeric_limits<int32_t>::max()) result[0] = 0;
+            if (result[1] == std::numeric_limits<int32_t>::max()) result[1] = dim_size;
+        } else if (result[2] < 0) {
+            // 负步长
+            if (result[0] == std::numeric_limits<int32_t>::max()) result[0] = dim_size - 1;
+            if (result[1] == std::numeric_limits<int32_t>::max()) result[1] = -1;
+        } else {
+            // 步长为0，这是无效的
+            throw std::invalid_argument("Slice step cannot be zero");
+        }
 
         return result;
     }

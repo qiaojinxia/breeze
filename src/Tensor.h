@@ -42,6 +42,7 @@ public:
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> flatten() = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> flatten(int start_dim, int end_dim) = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> repeat(const std::vector<size_t>& repeats) const = 0;
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;

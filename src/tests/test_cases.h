@@ -13,6 +13,7 @@
 using namespace Breeze;
 class TensorTest {
 public:
+
     // 打印张量形状
     static void print_shape(const std::vector<size_t>& shape) {
         std::cout << "(";
@@ -900,7 +901,7 @@ public:
         }, std::invalid_argument);
 
         ASSERT_THROWS({
-            std::vector<Tensor<float>*> tensors;  // 空向量
+            const std::vector<Tensor<float>*> tensors;  // 空向量
             CPUTensor<float>::stack(tensors, 0);
         }, std::invalid_argument);
 
@@ -908,9 +909,132 @@ public:
         test_stack_5d();
     }
 
+    static void test_repeat() {
+
+        // // 1维张量测试
+        {
+            auto t1 = CPUTensor<float>::arange(0,3,1);
+            const auto result = t1->repeat({2});
+            ASSERT_EQ_VECTOR(result->get_shape().dims(), std::vector<size_t>({6}));
+            std::vector<std::vector<int>> expected = {
+                {0, 1, 2, 0, 1, 2}
+            };
+            COMPARE_TENSOR_DATA(result->data(), expected, 0);
+        }
+
+        // 2维张量测试
+        {
+            CPUTensor<float> tensor2d({2, 2});
+            tensor2d.set_value({0, 0}, 1);
+            tensor2d.set_value({0, 1}, 2);
+            tensor2d.set_value({1, 0}, 3);
+            tensor2d.set_value({1, 1}, 4);
+            auto result = tensor2d.repeat({2, 3});
+            ASSERT_EQ_VECTOR(result->get_shape().dims(), std::vector<size_t>({4, 6}));
+            std::vector<std::vector<int>> expected = {
+                {1, 2, 1, 2, 1, 2},
+                {3, 4, 3, 4, 3, 4},
+                {1, 2, 1, 2, 1, 2},
+                {3, 4, 3, 4, 3, 4}
+            };
+            COMPARE_TENSOR_DATA(result->data(), expected, 0);
+        }
+
+
+        // 标量无法复制
+        ASSERT_THROWS({
+            auto t1 = CPUTensor<float>::scalar(1);
+            auto _ = t1->repeat({2}); // 维度数量不匹配
+        }, std::invalid_argument);
+
+        // 维度不匹配测试
+        ASSERT_THROWS({
+            CPUTensor<float> tensor({2, 3});
+            auto _ = tensor.repeat({2}); // 维度数量不匹配
+        }, std::invalid_argument);
+
+        // 零重复次数测试
+        ASSERT_THROWS({
+            CPUTensor<float> tensor({2, 3});
+            auto _ = tensor.repeat({2, 0});
+        }, std::invalid_argument);
+
+        // Case 3: 2D tensor, repeat with more dimensions
+        {
+            auto t1 = CPUTensor<float>::arange(0,12,1)->view({2,3,2});
+            auto result = t1->repeat({2, 2, 2, 2, 2});
+            std::vector<std::vector<float>> expected =  {
+                { 0,  1,  0,  1},{ 2,  3,  2,  3},{ 4,  5,  4,  5},{ 0,  1,  0,  1},
+                { 2,  3,  2,  3},{ 4,  5,  4,  5},{ 6,  7,  6,  7},{ 8,  9,  8,  9},
+                { 10, 11, 10, 11},{ 6,  7,  6,  7},{ 8,  9,  8,  9},{ 10, 11, 10, 11},
+                { 0,  1,  0,  1},{ 2,  3,  2,  3},{ 4,  5,  4,  5},{ 0,  1,  0,  1},
+                 { 2,  3,  2,  3},{ 4,  5,  4,  5},{ 6,  7,  6,  7},{ 8,  9,  8,  9},
+                 { 10, 11, 10, 11},{ 6,  7,  6,  7},{ 8,  9,  8,  9},{ 10, 11, 10, 11},
+                { 0,  1,  0,  1},{ 2,  3,  2,  3},{ 4,  5,  4,  5},{ 0,  1,  0,  1},
+                 { 2,  3,  2,  3},{ 4,  5,  4,  5},{ 6,  7,  6,  7},{ 8,  9,  8,  9},
+                 { 10, 11, 10, 11},{ 6,  7,  6,  7},{ 8,  9,  8,  9},{ 10, 11, 10, 11},
+                 { 0,  1,  0,  1},{ 2,  3,  2,  3},{ 4,  5,  4,  5},{ 0,  1,  0,  1},
+                 { 2,  3,  2,  3},{ 4,  5,  4,  5},{ 6,  7,  6,  7},{ 8,  9,  8,  9},
+                 {10, 11, 10, 11},{ 6,  7,  6,  7},{ 8,  9,  8,  9},{ 10, 11, 10, 11}
+
+            };
+            COMPARE_TENSOR_DATA(result->data(), expected, 1e-6);
+        }
+
+        // 非连续张量的repeat测试
+        {
+            CPUTensor<float> tensor3d({3, 4, 5});
+            for (int i = 0; i < 3 * 4 * 5; ++i) {
+                tensor3d.data()[i] = static_cast<float>(i);
+            }
+            auto sliced_tensor = tensor3d.slice({"1:3", "0:4:2", "1:4"});
+            auto result = sliced_tensor->repeat({2, 2, 1});
+            ASSERT_EQ_VECTOR(result->get_shape().dims(), std::vector<size_t>({4, 4, 3}));
+            std::vector<std::vector<float>> expected = {
+                {21, 22, 23}, {31, 32, 33}, {21, 22, 23}, {31, 32, 33},
+                {41, 42, 43}, {51, 52, 53}, {41, 42, 43}, {51, 52, 53},
+                {21, 22, 23}, {31, 32, 33}, {21, 22, 23}, {31, 32, 33},
+                {41, 42, 43}, {51, 52, 53}, {41, 42, 43}, {51, 52, 53}
+            };
+            COMPARE_TENSOR_DATA(result->data(), expected, 1e-6);
+        }
+
+        //非连续 负数索引 repeat 测试
+
+        {
+
+            auto t1 = CPUTensor<float>::arange(0,96,1)->view({4, 6, 4})->slice({"::-2",{"::-2"},{"::-2"}});
+            auto result =  t1->repeat({2,2,3,2});
+            std::vector<std::vector<float>> expected = {
+                {95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},{95, 93, 95, 93},
+                {87, 85, 87, 85},{79, 77, 79, 77},{95, 93, 95, 93},{87, 85, 87, 85},
+                {79, 77, 79, 77},{47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},
+                {47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},{47, 45, 47, 45},
+                {39, 37, 39, 37},{31, 29, 31, 29},{95, 93, 95, 93},{87, 85, 87, 85},
+                {79, 77, 79, 77},{95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},
+                {95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},{47, 45, 47, 45},
+                {39, 37, 39, 37},{31, 29, 31, 29},{47, 45, 47, 45},{39, 37, 39, 37},
+                {31, 29, 31, 29},{47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},
+                {95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},{95, 93, 95, 93},
+                {87, 85, 87, 85},{79, 77, 79, 77},{95, 93, 95, 93},{87, 85, 87, 85},
+                {79, 77, 79, 77},{47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},
+                {47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},{47, 45, 47, 45},
+                {39, 37, 39, 37},{31, 29, 31, 29},{95, 93, 95, 93},{87, 85, 87, 85},
+                {79, 77, 79, 77},{95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},
+                {95, 93, 95, 93},{87, 85, 87, 85},{79, 77, 79, 77},{47, 45, 47, 45},
+                {39, 37, 39, 37},{31, 29, 31, 29},{47, 45, 47, 45},{39, 37, 39, 37},
+                {31, 29, 31, 29},{47, 45, 47, 45},{39, 37, 39, 37},{31, 29, 31, 29},
+                };
+            std::cout << *result << std::endl;
+            COMPARE_TENSOR_DATA(result->data(), expected, 1e-6);
+
+        }
+    }
+
 
     // 运行所有测试
     static void run_all_tests() {
+        test_repeat();
         test_stack();
         test_randn();
         test_flatten();

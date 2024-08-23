@@ -361,7 +361,6 @@ namespace Breeze {
             int32_t start = slice_params[0];
             int32_t end = slice_params[1];
             int32_t step = slice_params[2];
-
             if (step == 0) {
                 throw std::invalid_argument("Slice step cannot be zero");
             }
@@ -565,6 +564,70 @@ namespace Breeze {
 
         return currentTensor;
     }
+
+    template <typename T>
+    [[nodiscard]] std::shared_ptr<Tensor<T>> CPUTensor<T>::repeat(const std::vector<size_t>& repeats) const {
+    const std::vector<size_t>& current_shape = this->get_shape().dims();
+    std::vector<size_t> new_shape;
+    new_shape.reserve(repeats.size());
+
+    if (current_shape.empty())
+        throw std::invalid_argument("Cannot repeat a scalar (0-dimensional tensor)");
+
+    if (repeats.size() < current_shape.size())
+        throw std::invalid_argument("Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor");
+    const size_t prepend_dims = repeats.size() > current_shape.size() ? repeats.size() - current_shape.size() : 0;
+
+    for (size_t i = 0; i < repeats.size(); ++i) {
+        if (repeats[i] == 0)
+            throw std::invalid_argument(Utils::Format("Trying to create tensor with zero dimension at index %zu", i));
+        if (repeats[i] < 0)
+            throw std::invalid_argument(Utils::Format("Trying to create tensor with negative dimension %zu", repeats[i]));
+
+        if (i < prepend_dims) {
+            new_shape.push_back(repeats[i]);
+        } else {
+            new_shape.push_back(repeats[i] * current_shape[i - prepend_dims]);
+        }
+    }
+
+    auto dst_tensor = std::make_shared<CPUTensor>(new_shape);
+    T* dst_data = dst_tensor->data();
+    const T* src_data = this->data();
+
+    const auto& src_shape = this->shape.dims();
+    const int32_t src_ndim = this->shape.ndim();
+    const auto& src_strides = this->get_strides();
+    const auto& src_steps = this->get_steps();
+
+    // 计算外部循环的维度
+    size_t outer_dim = 1;
+    for (size_t d = 0; d < new_shape.size() - src_ndim; ++d) {
+        outer_dim *= new_shape[d];
+    }
+
+    const size_t inner_dim = dst_tensor->size() / outer_dim;
+
+    // #pragma omp parallel for if(outer_dim > 1024)
+    for (size_t i = 0; i < outer_dim; ++i) {
+        size_t dst_offset = i * inner_dim;
+
+        for (size_t j = 0; j < inner_dim; ++j) {
+            size_t idx = j;
+            int32_t src_offset = this->offset_;
+
+            for (int32_t k = src_ndim - 1; k >= 0; --k) {
+                size_t src_idx = (idx % new_shape[k + prepend_dims]) % src_shape[k];
+                idx /= new_shape[k + prepend_dims];
+                src_offset += src_idx * src_strides[k] * src_steps[k];
+            }
+
+            dst_data[dst_offset + j] = src_data[src_offset];
+        }
+    }
+
+    return dst_tensor;
+}
 
     template <typename T>
     std::shared_ptr<Tensor<T>> CPUTensor<T>::contiguous(){

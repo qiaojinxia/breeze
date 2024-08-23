@@ -50,4 +50,35 @@ do { \
     std::cout << "Tensor data matches expected values." << std::endl; \
 } while(0)
 
+
+
+// 专门用于 std::vector<size_t> 的 ASSERT_EQ 宏
+#define ASSERT_EQ_VECTOR(actual, expected) \
+    do { \
+        const auto& a = (actual); \
+        const auto& e = (expected); \
+        if (a.size() != e.size()) { \
+            std::ostringstream ss; \
+            ss << "Assertion failed: " << #actual << " == " << #expected << "\n"; \
+            ss << "Vector sizes do not match.\n"; \
+            ss << "  Actual size: " << a.size() << "\n"; \
+            ss << "Expected size: " << e.size() << "\n"; \
+            ss << "    File: " << __FILE__ << "\n"; \
+            ss << "    Line: " << __LINE__ << "\n"; \
+            throw std::runtime_error(ss.str()); \
+        } \
+        for (size_t i = 0; i < a.size(); ++i) { \
+            if (a[i] != e[i]) { \
+                std::ostringstream ss; \
+                ss << "Assertion failed: " << #actual << " == " << #expected << "\n"; \
+                ss << "Vectors differ at index " << i << "\n"; \
+                ss << "  Actual: " << a[i] << "\n"; \
+                ss << "Expected: " << e[i] << "\n"; \
+                ss << "    File: " << __FILE__ << "\n"; \
+                ss << "    Line: " << __LINE__ << "\n"; \
+                throw std::runtime_error(ss.str()); \
+            } \
+        } \
+    } while (0)
+
 #endif //MACRO_H
