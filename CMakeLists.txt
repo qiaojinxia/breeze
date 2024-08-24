@@ -22,7 +22,8 @@ endif()
 
 # 查找 OpenBLAS
 if(APPLE)
-    set(CMAKE_CXX_COMPILER "/usr/local/bin/gcc")
+    set(CMAKE_C_COMPILER clang)
+    set(CMAKE_CXX_COMPILER clang++)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
         set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -42,15 +43,27 @@ if(OpenMP_CXX_FOUND)
     set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
 else()
     if(APPLE)
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang\$")
+            set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
+            set(OpenMP_C_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY omp)
+        endif()
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang\$")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY omp)
+        endif()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include ")
             set(OpenMP_CXX_LIB_NAMES "omp")
             set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
             set(OpenMP_CXX_INCLUDE_DIRS "/opt/homebrew/opt/libomp/include")
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-            set(OpenMP_CXX_FLAGS     "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
             set(OpenMP_CXX_LIB_NAMES "omp")
             set(OpenMP_omp_LIBRARY "/usr/local/opt/libomp/lib/libomp.dylib")
+            set(OpenMP_CXX_INCLUDE_DIRS "/usr/local/opt/libomp/include")
         endif()
     else()
         set(OpenMP_CXX_FLAGS "-fopenmp")
@@ -60,7 +73,7 @@ else()
     endif()
 endif()
 
-
+find_package(OpenMP REQUIRED)
 # 定义源文件
 set(SOURCES
         src/main.cpp
@@ -118,7 +131,7 @@ target_include_directories(breeze PRIVATE
 target_link_libraries(breeze PRIVATE
         ${ARMADILLO_LIBRARIES}
         ${OpenBLAS_LIB}
-        ${OpenMP_omp_LIBRARY}
+        OpenMP::OpenMP_CXX
 
 )
 

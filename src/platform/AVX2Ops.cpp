@@ -16,7 +16,7 @@ namespace Breeze {
         for (int32_t i = 0; i < aligned_size; i += vector_size) {
             const __m256 a_vec = _mm256_load_ps(a + i * a_stride);
             const __m256 b_vec = _mm256_load_ps(b + i * b_stride);
-            __m256 result_vec = _mm256_mul_ps(a_vec, b_vec);
+            const __m256 result_vec = _mm256_mul_ps(a_vec, b_vec);
             _mm256_store_ps(destination + i * dest_stride, result_vec);
         }
     }
@@ -31,7 +31,7 @@ namespace Breeze {
         for (int32_t i = 0; i < aligned_size; i += vector_size) {
             const __m256d a_vec = _mm256_load_pd(a + i * a_stride);
             const __m256d b_vec = _mm256_load_pd(b + i * b_stride);
-            __m256d result_vec = _mm256_mul_pd(a_vec, b_vec);
+            const __m256d result_vec = _mm256_mul_pd(a_vec, b_vec);
             _mm256_store_pd(destination + i * dest_stride, result_vec);
         }
 
