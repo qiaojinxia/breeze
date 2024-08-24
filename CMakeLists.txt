@@ -55,7 +55,7 @@ else()
             set(OpenMP_omp_LIBRARY omp)
         endif()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include ")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
             set(OpenMP_CXX_LIB_NAMES "omp")
             set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
             set(OpenMP_CXX_INCLUDE_DIRS "/opt/homebrew/opt/libomp/include")
@@ -112,7 +112,7 @@ target_compile_definitions(breeze PRIVATE
 )
 
 # 设置编译选项
-target_compile_options(breeze PRIVATE ${OpenMP_CXX_FLAGS})
+
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     target_compile_options(breeze PRIVATE "-mavx2")

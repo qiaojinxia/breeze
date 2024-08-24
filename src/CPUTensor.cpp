@@ -260,7 +260,7 @@ namespace Breeze {
         const auto& strides = this->get_strides();
         const auto& steps = this->steps_;
         const size_t total_elements = this->get_shape().total_size();
-#pragma omp parallel for
+        #pragma omp parallel for
         for (size_t i = 0; i < total_elements; ++i) {
             // 计算偏移量
             int32_t offset = offset_;
