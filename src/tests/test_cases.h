@@ -1032,9 +1032,9 @@ public:
     }
 
     static void test_add() {
-        const auto a = CPUTensor<float>({100,100,100},2);
-        const auto b = CPUTensor<float>({100,100,100},4);
-        MEASURE_TIME(a / b);
+        const auto a = CPUTensor<float>({1000,1000,1000},2);
+        const auto b = CPUTensor<float>({1000,1000,1000},4);
+        MEASURE_TIME(a + b);
         // auto c = a / b;
         // std::cout << *c << std::endl;
     }

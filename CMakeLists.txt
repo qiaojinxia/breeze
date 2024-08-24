@@ -22,6 +22,7 @@ endif()
 
 # 查找 OpenBLAS
 if(APPLE)
+    set(CMAKE_CXX_COMPILER "/usr/local/bin/gcc")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
         set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -34,26 +35,31 @@ else()
 endif()
 
 # 查找 OpenMP 库
-find_package(OpenMP)
-set(OpenMP_CXX_LIB_NAMES "omp")
+find_package(OpenMP COMPONENTS CXX)
 if(OpenMP_CXX_FOUND)
-    set(OpenMP_FLAGS ${OpenMP_CXX_FLAGS})
-    set(OpenMP_LIBS OpenMP::OpenMP_CXX)
+    set(OpenMP_CXX_FLAGS ${OpenMP_CXX_FLAGS})
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
 else()
     if(APPLE)
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(OpenMP_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
-            set(OpenMP_LIBS "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+            set(OpenMP_CXX_INCLUDE_DIRS "/opt/homebrew/opt/libomp/include")
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-            set(OpenMP_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
-            set(OpenMP_LIBS "/usr/local/opt/libomp/lib/libomp.dylib")
+            set(OpenMP_CXX_FLAGS     "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY "/usr/local/opt/libomp/lib/libomp.dylib")
         endif()
     else()
-        set(OpenMP_FLAGS "-fopenmp")
+        set(OpenMP_CXX_FLAGS "-fopenmp")
+        set(OpenMP_CXX_LIB_NAMES "gomp")
         find_library(OpenMP_LIBS NAMES gomp)
         set(OpenMP_LIBS ${OpenMP_gomp_LIBRARY})
     endif()
 endif()
+
 
 # 定义源文件
 set(SOURCES
@@ -93,10 +99,12 @@ target_compile_definitions(breeze PRIVATE
 )
 
 # 设置编译选项
-target_compile_options(breeze PRIVATE ${OpenMP_FLAGS})
+target_compile_options(breeze PRIVATE ${OpenMP_CXX_FLAGS})
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     target_compile_options(breeze PRIVATE "-mavx2")
 endif()
+
 
 # 设置包含目录
 target_include_directories(breeze PRIVATE
@@ -110,7 +118,7 @@ target_include_directories(breeze PRIVATE
 target_link_libraries(breeze PRIVATE
         ${ARMADILLO_LIBRARIES}
         ${OpenBLAS_LIB}
-        ${OpenMP_LIBS}
+        ${OpenMP_omp_LIBRARY}
 
 )
 

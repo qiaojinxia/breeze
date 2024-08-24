@@ -3,7 +3,7 @@
 
 #include "Tensor.h"
 #include <vector>
-
+#include <omp.h>
 #include <iostream>
 
 namespace Breeze {
@@ -55,7 +55,7 @@ namespace Breeze {
                 outer_dim *= shape_[i];
             }
             const size_t inner_dim = shape_.back();
-
+#pragma omp parallel for
             for (size_t i = 0; i < outer_dim; ++i) {
                 std::vector<size_t> coords(shape_.size() - 1);
                 size_t temp = i;
