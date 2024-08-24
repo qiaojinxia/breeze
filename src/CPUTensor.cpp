@@ -88,6 +88,14 @@ namespace Breeze {
 
 
     template<typename T>
+    void CPUTensor<T>::set_initial_shape(Shape& shape) {
+            this->shape = std::move(shape);
+            memory_block_ = std::make_shared<TensorStorage<T, CPUDevice>>(this->get_shape().total_size());
+            steps_ = std::vector<int32_t>(this->get_shape().ndim(),1);
+    }
+
+
+    template<typename T>
     std::shared_ptr<CPUTensor<T>> CPUTensor<T>::randn(std::vector<size_t> shape) {
         const size_t seed = std::chrono::system_clock::now().time_since_epoch().count();
         std::default_random_engine generator(seed);
@@ -252,7 +260,6 @@ namespace Breeze {
         const auto& strides = this->get_strides();
         const auto& steps = this->steps_;
         const size_t total_elements = this->get_shape().total_size();
-
         for (size_t i = 0; i < total_elements; ++i) {
             // 计算偏移量
             int32_t offset = offset_;
@@ -673,7 +680,6 @@ namespace Breeze {
         const size_t copy_size = src_shape.back();
         const int32_t src_inc_step = src_strides[ndim-1] * src_steps[ndim-1];
 
-        #pragma omp parallel for if(outer_dim > 1024)
         for (size_t i = 0; i < outer_dim; ++i) {
             int32_t src_offset = offset_;
             int32_t dst_offset = 0;
@@ -892,7 +898,6 @@ namespace Breeze {
         const auto size = static_cast<size_t>(std::ceil((end - start) / step));
         auto tensor = std::make_shared<CPUTensor>(Shape{size});
 
-        #pragma omp parallel for if(size > 16777216)
         for (size_t i = 0; i < size; ++i) {
             tensor->data()[i] = start + i * step;
         }
@@ -1061,7 +1066,6 @@ namespace Breeze {
                             cblas_dcopy(last_dim_size, src_data + src_blas_offset, src_inc_step,
                                         result_data + dst_offset, 1);
                         } else {
-                            #pragma omp parallel for
                             for (size_t k = 0; k < last_dim_size; ++k) {
                                 result_data[dst_offset + k] = src_data[current_src_offset + k * src_inc_step];
                             }

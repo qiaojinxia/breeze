@@ -124,6 +124,59 @@ public:
         std::cout << "Tensor data matches expected values." << std::endl;
     }
 
+
+
+    static std::tuple<std::vector<size_t>, std::vector<size_t>, std::vector<size_t>>
+    calc_broadcast_shape(const std::vector<size_t>& shape1, const std::vector<size_t>& shape2,const bool matmul) {
+        // 计算目标形状
+        std::vector<size_t> targetShape;
+        const int maxDims = static_cast<int>(std::max(shape1.size(), shape2.size()));
+        targetShape.resize(maxDims);
+        if (matmul) {
+            // 特殊处理矩阵乘法的情况
+            if (shape1.size() < 2 || shape2.size() < 2) {
+                throw std::runtime_error("For matmul, both shapes must have at least 2 dimensions");
+            }
+            // 处理除最后两个维度之外的部分
+            for (int i = 0; i < maxDims - 2; ++i) {
+                const size_t dim1 = i < shape1.size() - 2 ? shape1[i] : 1;
+                const size_t dim2 = i < shape2.size() - 2 ? shape2[i] : 1;
+                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                    throw std::runtime_error("Incompatible shapes for broadcasting in matmul");
+                }
+                targetShape[i] = std::max(dim1, dim2);
+            }
+
+            // 处理最后两个维度
+            targetShape[maxDims - 2] = shape1[shape1.size() - 2];
+            targetShape[maxDims - 1] = shape2[shape2.size() - 1];
+        } else {
+            for (int i = 0; i < maxDims; ++i) {
+                const size_t dim1 = i < shape1.size() ? shape1[shape1.size() - 1 - i] : 1;
+                const size_t dim2 = i < shape2.size() ? shape2[shape2.size() - 1 - i] : 1;
+                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                    throw std::runtime_error("Incompatible shapes for broadcasting");
+                }
+                targetShape[maxDims - 1 - i] = std::max(dim1, dim2);
+            }
+        }
+
+        // 计算输入向量的步长
+        std::vector<size_t> strides1(maxDims, 0), strides2(maxDims, 0);
+        int32_t stride1 = 1, stride2 = 1;
+        // 矩阵乘法的步长计算
+        for (int i = static_cast<int>(shape1.size()) - 1; i >= 0; --i) {
+            strides1[maxDims - shape1.size() + i] = shape1[i] == 1 ? 0 : stride1;
+            stride1 *= static_cast<int32_t>(shape1[i]);
+        }
+        for (int i = static_cast<int>(shape2.size()) - 1; i >= 0; --i) {
+            strides2[maxDims - shape2.size() + i] = shape2[i] == 1 ? 0 : stride2;
+            stride2 *= static_cast<int32_t>(shape2[i]);
+        }
+
+        return {strides1, strides2, targetShape};
+    }
+
 };
 
 #endif //UTILS_H

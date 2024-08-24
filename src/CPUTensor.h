@@ -12,6 +12,7 @@ namespace Breeze {
     class CPUTensor final : public Tensor<T>, public std::enable_shared_from_this<CPUTensor<T>>  {
     public:
         ~CPUTensor() override ;
+
         explicit CPUTensor(Shape shape);
         explicit CPUTensor(std::vector<size_t> shape_size);
         CPUTensor(std::initializer_list<size_t> shape_size);
@@ -55,6 +56,7 @@ namespace Breeze {
 
         T* data() override;
         [[nodiscard]] const T* data() const override;
+        void set_initial_shape(Shape& shape) override;
 
         [[nodiscard]] std::shared_ptr<Tensor<T>> clone() const override;
         [[nodiscard]] std::shared_ptr<Tensor<T>> contiguous() override;
@@ -72,6 +74,7 @@ namespace Breeze {
         void fill(T value) override;
         void fill(const std::function<T(const std::vector<size_t>&)>& value_func) override;
 
+
         [[nodiscard]] std::vector<int32_t> get_steps() const override;
         [[nodiscard]] std::vector<size_t> get_strides() const override;
         [[nodiscard]] size_t n_bytes() const override;
@@ -79,6 +82,7 @@ namespace Breeze {
         static std::shared_ptr<CPUTensor> arange(T start, T end, T step);
         static std::shared_ptr<CPUTensor> scalar(T value);
         static std::shared_ptr<CPUTensor> vector(size_t size);
+
     private:
         std::shared_ptr<TensorStorage<T, CPUDevice>> memory_block_;
         size_t offset_ = 0;
