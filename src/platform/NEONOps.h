@@ -4,9 +4,7 @@
 
 #ifndef BREEZE_NEONOPS_H
 #define BREEZE_NEONOPS_H
-
 #include "SIMDOps.h"
-
 #ifdef USE_NEON
 
 namespace Breeze {
@@ -25,12 +23,15 @@ namespace Breeze {
         }
 
         void multiply(T* destination, const T* a, const T* b,
-                      int32_t num_elements, int32_t dest_stride,
+                      size_t elements_size, int32_t dest_stride,
                       int32_t a_stride, int32_t b_stride) const override;
+
         void divide(T* destination, const T* a, const T* b,
-            int32_t num_elements, int32_t dest_stride, int32_t a_stride, int32_t b_stride) const override;
+            size_t elements_size, int32_t dest_stride, int32_t a_stride, int32_t b_stride) const override;
 
+        void fill(T *data_ptr, T value, size_t aligned64_size) const override;
 
+        void eq(const T* a, const T* b, bool* result, size_t elements_size) const override;
     };
 
 } // namespace Breeze

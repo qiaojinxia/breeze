@@ -56,6 +56,7 @@ namespace Breeze {
 
         T* data() override;
         [[nodiscard]] const T* data() const override;
+        [[nodiscard]] size_t align_size() const override;
         void set_initial_shape(Shape& shape) override;
 
         [[nodiscard]] std::shared_ptr<Tensor<T>> clone() const override;

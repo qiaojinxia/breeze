@@ -46,10 +46,11 @@ public:
 
     virtual T* data() = 0;
     virtual const T* data() const = 0;
+    [[nodiscard]] virtual size_t align_size() const = 0;
     virtual void set_initial_shape(Shape& shape) = 0;
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
-    [[nodiscard]] virtual  std::shared_ptr<Tensor> contiguous() = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> contiguous() = 0;
     [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
     virtual void set_value(const std::vector<size_t>& indices, T value) = 0;
 
@@ -118,7 +119,6 @@ private:
     size_t Tensor<T>::num_elements() const {
         return shape.total_size();
     }
-
 
 
     template<typename T>

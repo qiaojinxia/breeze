@@ -7,6 +7,7 @@
 #include "platform/SIMDFactory.h"
 
 namespace Breeze {
+
     template<typename T>
     std::shared_ptr<Tensor<T>> CPUTensorOps<T>::add(const Tensor<T>& a, const Tensor<T>& b) const {
 
@@ -14,7 +15,7 @@ namespace Breeze {
 
         auto iter = TensorIterator<T>::binary_op(*result, a, b);
 
-        iter->for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
+        iter.for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
                      const size_t num_elements, const int32_t destination_stride, const int32_t a_stride, const int32_t b_stride) {
             if constexpr (std::is_same_v<T, float>) {
                 cblas_scopy(num_elements, a_ptr, a_stride, destination, destination_stride);
@@ -40,7 +41,7 @@ namespace Breeze {
 
         auto iter = TensorIterator<T>::binary_op(*result, a, b);
 
-        iter->for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
+        iter.for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
                      const size_t num_elements, const int32_t destination_stride, const int32_t a_stride, const int32_t b_stride) {
             if constexpr (std::is_same_v<T, float>) {
                 cblas_scopy(num_elements, a_ptr, a_stride, destination, destination_stride);
@@ -63,7 +64,7 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<T>>();
         auto iter = TensorIterator<T>::binary_op(*result, a, b);
 
-        iter->for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
+        iter.for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
                            const size_t num_elements, const int32_t destination_stride,
                            const int32_t a_stride, const int32_t b_stride) {
             const auto& ops = getSIMDOps<T>();
@@ -78,7 +79,7 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<T>>();
         auto iter = TensorIterator<T>::binary_op(*result, a, b);
 
-        iter->for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
+        iter.for_each([&](T* destination, const T* a_ptr, const T* b_ptr,
                            const size_t num_elements, const int32_t destination_stride,
                            const int32_t a_stride, const int32_t b_stride) {
             const auto& ops = getSIMDOps<T>();

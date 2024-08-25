@@ -5,7 +5,7 @@
 #include <sstream>
 using namespace Breeze;
 int main() {
-#pragma omp parallel
+    #pragma omp parallel
     {
         std::stringstream ss;
         ss << std::this_thread::get_id();

@@ -1,6 +1,7 @@
 #include "CPUTensor.h"
 #include <stdexcept>
 #include "omp.h"
+
 namespace Breeze {
     template<typename T>
     CPUTensor<T>::~CPUTensor() = default;
@@ -22,7 +23,7 @@ namespace Breeze {
     CPUTensor<T>::CPUTensor(const std::initializer_list<size_t> shape_size)
     : Tensor<T>(Shape(shape_size), Device::CPU),
       memory_block_(std::make_shared<TensorStorage<T, CPUDevice>>(this->get_shape().total_size())),
-      steps_(shape_size.size(), 1) {}
+      steps_(this->get_shape().ndim(), 1) {}
 
     template<typename T>
     CPUTensor<T>::CPUTensor(const CPUTensor& other)
@@ -119,7 +120,7 @@ namespace Breeze {
 
         #pragma omp parallel for
         // 填充张量with随机数
-        for (size_t i = 0; i < tensor->num_elements(); ++i) {
+        for (size_t i = 0; i < tensor->align_size(); ++i) {
             tensor->data()[i] = distribution(generator);
         }
 
@@ -159,7 +160,7 @@ namespace Breeze {
 
     template<typename T>
     size_t CPUTensor<T>::n_bytes() const  {
-        return memory_block_->getTotalBytes();
+        return memory_block_->total_bytes();
     }
 
     template<typename T>
@@ -230,12 +231,17 @@ namespace Breeze {
 
     template<typename T>
     T* CPUTensor<T>::data() {
-        return memory_block_->getData();
+        return memory_block_->data();
     }
 
     template<typename T>
     [[nodiscard]] const T* CPUTensor<T>::data() const {
-        return memory_block_->getData();
+        return memory_block_->data();
+    }
+
+    template<typename T>
+    [[nodiscard]]  size_t CPUTensor<T>::align_size() const {
+       return memory_block_->total_size();
     }
 
     template<typename T>
@@ -250,6 +256,11 @@ namespace Breeze {
 
     template<typename T>
     void CPUTensor<T>::fill(T value) {
+        if (is_contiguous()) {
+            const auto& ops = getSIMDOps<T>();
+            ops.fill(this->data(), value, this->align_size());
+            return;
+        }
         fill([&](const std::vector<size_t>& _coords) {return value;});
     }
 
@@ -260,16 +271,15 @@ namespace Breeze {
         const auto& strides = this->get_strides();
         const auto& steps = this->steps_;
         const size_t total_elements = this->get_shape().total_size();
-        #pragma omp parallel for
+
         for (size_t i = 0; i < total_elements; ++i) {
             // 计算偏移量
-            int32_t offset = offset_;
+             int32_t offset = offset_;
             for (int32_t j = 0; j < indices.size(); ++j) {
                 offset += indices[j] * strides[j] * steps_[j];
             }
-
             // 填充当前位置
-            memory_block_->getData()[offset] = value_func(indices);
+            memory_block_->data()[offset] = value_func(indices);
             // 更新索引
             for (int32_t dim = static_cast<int32_t>(indices.size()) - 1; dim >= 0; --dim) {
                 if (++indices[dim] < dims[dim]) {
@@ -292,7 +302,7 @@ namespace Breeze {
         for (int32_t i = 0; i < indices.size(); ++i) {
             offset += indices[i] * strides[i] * steps_[i];
         }
-        return memory_block_->getData()[offset];
+        return memory_block_->data()[offset];
     }
 
     template<typename T>
@@ -302,7 +312,7 @@ namespace Breeze {
             auto stride = this->get_strides()[i];
             offset += indices[i] * stride * steps_[i];
         }
-        T* data_ptr = &memory_block_->getData()[offset];
+        T* data_ptr = &memory_block_->data()[offset];
         *data_ptr = value;
     }
 
@@ -563,7 +573,7 @@ namespace Breeze {
         }
 
         // 如果不是连续的，调用 clone()
-        auto currentTensor = std::dynamic_pointer_cast<CPUTensor>( this->clone());
+        auto currentTensor = std::dynamic_pointer_cast<CPUTensor>(this->clone());
         if (currentTensor) {
             currentTensor->shape = Shape(new_shape);
         } else {
@@ -616,9 +626,9 @@ namespace Breeze {
 
     const size_t inner_dim = dst_tensor->size() / outer_dim;
 
-    // #pragma omp parallel for if(outer_dim > 1024)
+    #pragma omp parallel for if(outer_dim > 1024)
     for (size_t i = 0; i < outer_dim; ++i) {
-        size_t dst_offset = i * inner_dim;
+        const size_t dst_offset = i * inner_dim;
 
         for (size_t j = 0; j < inner_dim; ++j) {
             size_t idx = j;
@@ -649,7 +659,7 @@ namespace Breeze {
 
     template <typename T>
     std::shared_ptr<Tensor<T>> CPUTensor<T>::clone() const {
-        const auto& src_shape = this->shape.dims();
+        const auto src_shape = this->shape.dims();
         const int32_t ndim = this->shape.ndim();
         const auto& src_strides = this->get_strides();
         const auto& src_steps = this->get_steps();
@@ -898,7 +908,7 @@ namespace Breeze {
 
         const auto size = static_cast<size_t>(std::ceil((end - start) / step));
         auto tensor = std::make_shared<CPUTensor>(Shape{size});
-
+        #pragma omp parallel for
         for (size_t i = 0; i < size; ++i) {
             tensor->data()[i] = start + i * step;
         }
@@ -1080,4 +1090,5 @@ namespace Breeze {
     // Explicit instantiation for common types
     template class CPUTensor<float>;
     template class CPUTensor<double>;
+
 } // namespace Breeze

@@ -1032,31 +1032,32 @@ public:
     }
 
     static void test_add() {
-        const auto a = CPUTensor<float>({100,100,100},2);
-        const auto b = CPUTensor<float>({100,100,100},4);
-        MEASURE_TIME(a + b);
-        // auto c = a / b;
+        const auto a = CPUTensor<float>({100,100,4},2);
+        const auto b = CPUTensor<float>({100,100,4},4);
+        // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+        // MEASURE_TIME(a * b);
+        auto c = b / a;
         // std::cout << *c << std::endl;
     }
 
     // 运行所有测试
     static void run_all_tests() {
         test_add();
-        // test_repeat();
-        // test_stack();
-        // test_randn();
-        // test_flatten();
-        // test_permute();
-        // // test_omp();
-        // test_expand();
-        // test_cat();
-        // test_unsqueeze();
-        // test_squeeze();
-        // test_view();
-        // test_clone();
-        // test_reshape();
-        // test_non_contiguous();
-        // test_transpose();
+        test_repeat();
+        test_stack();
+        test_randn();
+        test_flatten();
+        test_permute();
+        // test_omp();
+        test_expand();
+        test_cat();
+        test_unsqueeze();
+        test_squeeze();
+        test_view();
+        test_clone();
+        test_reshape();
+        test_non_contiguous();
+        test_transpose();
         std::cout << "All tests passed!" << std::endl;
     }
 };

@@ -7,8 +7,10 @@
 #include <stdexcept>
 #include <numeric>
 #include "common/Utils.h"
+#include "platform/SIMDFactory.h"
 
 namespace Breeze {
+
     struct CPUDevice {};
     struct GPUDevice {};
 
@@ -19,12 +21,12 @@ namespace Breeze {
     class TensorStorage<T, CPUDevice> {
     public:
         explicit TensorStorage(const size_t size)
-        : total_size(size), data(nullptr) {
-            allocateMemory();
+            : total_size_(size), padding_size_(0), data_(nullptr) {
+            allocate_memory();
         }
 
         ~TensorStorage() {
-            deallocateMemory();
+            deallocate_memory();
         }
 
         // 禁用复制
@@ -33,60 +35,67 @@ namespace Breeze {
 
         // 允许移动
         TensorStorage(TensorStorage&& other) noexcept
-            : total_size(other.total_size), data(other.data) {
-            other.data = nullptr;
-            other.total_size = 0;
+            : total_size_(other.total_size_), padding_size_(other.padding_size_), data_(other.data_) {
+            other.data_ = nullptr;
+            other.total_size_ = 0;
+            other.padding_size_ = 0;
         }
 
         TensorStorage& operator=(TensorStorage&& other) noexcept {
             if (this != &other) {
-                deallocateMemory();
-                data = other.data;
-                total_size = other.total_size;
-                other.data = nullptr;
-                other.total_size = 0;
+                deallocate_memory();
+                data_ = other.data_;
+                total_size_ = other.total_size_;
+                padding_size_ = other.padding_size_;
+                other.data_ = nullptr;
+                other.total_size_ = 0;
+                other.padding_size_ = 0;
             }
             return *this;
         }
 
-        void copyToDevice(const T* host_data, const size_t size) {
-            if (size != total_size) {
-                throw std::runtime_error("Size mismatch in copyToDevice");
+        void copy_to_device(const T* host_data, const size_t size) {
+            if (size != total_size_) {
+                throw std::runtime_error("Size mismatch in copy_to_device");
             }
-            std::memcpy(data, host_data, size * sizeof(T));
+            std::memcpy(data_, host_data, size * sizeof(T));
         }
 
-        void copyToHost(T* host_data, const size_t size) const {
-            if (size != total_size) {
-                throw std::runtime_error("Size mismatch in copyToHost");
+        void copy_to_host(T* host_data, const size_t size) const {
+            if (size != total_size_) {
+                throw std::runtime_error("Size mismatch in copy_to_host");
             }
-            std::memcpy(host_data, data, size * sizeof(T));
+            std::memcpy(host_data, data_, size * sizeof(T));
         }
 
-        T* getData() { return data; }
-        const T* getData() const { return data; }
-        [[nodiscard]] size_t getTotalSize() const { return total_size; }
-        [[nodiscard]] size_t getTotalBytes() const { return total_size * sizeof(T); }
+        T* data() { return data_; }
+        const T* data() const { return data_; }
+
+        [[nodiscard]] size_t total_size() const { return padding_size_; }
+        [[nodiscard]] size_t total_bytes() const { return padding_size_ * sizeof(T); }
+
     private:
-        void allocateMemory() {
+        void allocate_memory() {
             constexpr size_t alignment = 64;
-            const size_t size = total_size * sizeof(T);
+            const size_t size = total_size_ * sizeof(T);
             const size_t padded_size = (size + alignment - 1) & ~(alignment - 1);
-            data = static_cast<T*>(aligned_alloc(alignment, padded_size));
-            if (data == nullptr) {
+            data_ = static_cast<T*>(aligned_alloc(alignment, padded_size));
+            if (data_ == nullptr) {
                 throw std::bad_alloc();
             }
+            padding_size_ = padded_size / sizeof(T);
         }
 
-        void deallocateMemory() {
-            if (data != nullptr) {
-                free(data);
-                data = nullptr;
+        void deallocate_memory() {
+            if (data_ != nullptr) {
+                free(data_);
+                data_ = nullptr;
             }
         }
 
-        size_t total_size;
-        T* data;
+        size_t total_size_;
+        size_t padding_size_;
+        T* data_;
     };
 
     class Shape {
@@ -130,25 +139,15 @@ namespace Breeze {
             return dims_;
         }
 
-
         [[nodiscard]] std::string dims_str() const {
-            // 将 '[' 作为起始字符
-            std::string s = "[";  // 用双引号表示字符串
-
-            // 使用 std::accumulate 拼接字符串
+            std::string s = "[";
             s += std::accumulate(std::begin(dims_), std::end(dims_), std::string{},
-                [](const std::string& a,const size_t b) {
-                    // 如果 a 为空则返回第一个元素 b 否则添加 ',' 和 b
+                [](const std::string& a, const size_t b) {
                     return a.empty() ? std::to_string(b) : a + "," + std::to_string(b);
                 });
-
-            // 添加 ']' 作为结束字符
-            s += "]";  // 用双引号表示字符串
-
+            s += "]";
             return s;
         }
-
-
 
         [[nodiscard]] std::vector<size_t> strides() const {
             return Utils::compute_strides(this->dims());
@@ -179,4 +178,4 @@ namespace Breeze {
     };
 }
 
-#endif //TensorStorage_H
+#endif // TensorStorage_H
