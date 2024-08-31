@@ -17,12 +17,19 @@ class Tensor {
 protected:
     Device device;
     Shape shape;
-    [[nodiscard]] bool is_contiguous_in_range(int32_t start_dim, int32_t end_dim) const;
+    index_t offset_ = 0;  // Added offset_ as a member
+    std::vector<index_t> strides_;  // Added strides_ as a member
+
+    [[nodiscard]] bool is_contiguous_in_range(index_t start_dim, index_t end_dim) const;
+
 public:
     static const CPUTensorOps<T>* CpuOps;
     static const TensorOps<T>* getOps();
+
     Tensor(Shape _shape, Device _device);
     virtual ~Tensor() = default;
+
+    // Pure virtual operator overloads
     virtual T operator[](const std::string& index) const = 0;
     virtual std::shared_ptr<Tensor> operator+(const Tensor& rhs) const = 0;
     virtual std::shared_ptr<Tensor> operator-(const Tensor& rhs) const = 0;
@@ -31,45 +38,46 @@ public:
 
     virtual std::shared_ptr<Tensor> matmul(const Tensor& rhs) const = 0;
 
-    [[nodiscard]] virtual std::shared_ptr<Tensor> reshape(const std::vector<int32_t>& new_shape) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::string>& range_strings) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> view(const std::vector<int32_t>& new_shape) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> unsqueeze(int32_t dim) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze(int32_t dim) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> expand(const std::vector<int32_t>& new_shape) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> transpose(int32_t dim0, int32_t dim1) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> permute(const std::vector<int32_t>& dims) = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> reshape(const std::vector<index_t>& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::string>& range_strings) = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> view(const std::vector<index_t>& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> unsqueeze(index_t dim) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze(index_t dim) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> squeeze() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> expand(const std::vector<index_t>& new_shape) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> transpose(index_t dim0, index_t dim1) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> permute(const std::vector<index_t>& dims) = 0;
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> flatten() = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> flatten(int start_dim, int end_dim) = 0;
-    [[nodiscard]] virtual std::shared_ptr<Tensor> repeat(const std::vector<size_t>& repeats) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> flatten(index_t start_dim, index_t end_dim) = 0;
+    [[nodiscard]] virtual std::shared_ptr<Tensor> repeat(const std::vector<index_t>& repeats) const = 0;
 
-    virtual T* data() = 0;
+    virtual T* mutable_data() = 0;
     virtual const T* data() const = 0;
-    [[nodiscard]] virtual size_t align_size() const = 0;
+    [[nodiscard]] virtual index_t align_size() const = 0;
     virtual void set_initial_shape(Shape& shape) = 0;
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> contiguous() = 0;
-    [[nodiscard]] virtual const T& at(const std::vector<size_t>& indices) const = 0;
-    virtual void set_value(const std::vector<size_t>& indices, T value) = 0;
+    [[nodiscard]] virtual const T& at(const std::vector<index_t>& indices) const = 0;
+    virtual void set_value(const std::vector<index_t>& indices, T value) = 0;
 
-    [[nodiscard]] virtual size_t size() const;
+    [[nodiscard]] virtual index_t size() const;
     virtual void to_cpu() = 0;
     virtual void to_gpu() = 0;
     virtual void print(std::ostream& os) const = 0;
     [[nodiscard]] virtual bool is_contiguous() const = 0;
 
     virtual void fill(T value) = 0;
-    virtual void fill(const std::function<T(const std::vector<size_t>&)>& value_func) = 0;
+    virtual void fill(const std::function<T(const std::vector<index_t>&)>& value_func) = 0;
 
     [[nodiscard]] const Shape& get_shape() const;
+    [[nodiscard]] index_t get_offset() const;
     [[nodiscard]] Device get_device() const;
-    [[nodiscard]] virtual std::vector<size_t> get_strides() const = 0;
+    [[nodiscard]] virtual std::vector<index_t> get_strides() const = 0;
 
-    [[nodiscard]] virtual std::vector<int32_t> get_steps() const = 0;
-    [[nodiscard]] size_t num_elements() const;
-    [[nodiscard]] virtual size_t n_bytes() const = 0;
+    [[nodiscard]] index_t num_elements() const;
+    [[nodiscard]] virtual index_t n_bytes() const = 0;
 
 private:
     friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
@@ -78,36 +86,41 @@ private:
     }
 };
 
-    template<typename T>
-    Tensor<T>::Tensor(Shape _shape, const Device _device)
-        : device(_device), shape(std::move(_shape)) {}
+template<typename T>
+Tensor<T>::Tensor(Shape _shape, const Device _device)
+    : device(_device), shape(std::move(_shape)), offset_(0) , strides_(_shape.compute_strides()) {} // Initialize strides_
 
-    template<typename T>
-    const TensorOps<T>* Tensor<T>::getOps(){
-        if (CpuOps == nullptr) {
-            const auto* _op = new CPUTensorOps<T>();
-            CpuOps = _op;
-        }
-        return CpuOps;
+template<typename T>
+const TensorOps<T>* Tensor<T>::getOps() {
+    if (CpuOps == nullptr) {
+        const auto* _op = new CPUTensorOps<T>();
+        CpuOps = _op;
     }
+    return CpuOps;
+}
 
-    template<typename T>
-    size_t Tensor<T>::size() const {
-        size_t store_size = 1;
-        const auto& dims = shape.dims();
-        const auto& strides = get_strides();
+template<typename T>
+index_t Tensor<T>::size() const {
+    index_t store_size = 1;
+    const auto& dims = shape.dims();
+    const auto& strides = get_strides();
 
-        for (size_t i = 0; i < dims.size(); ++i) {
-            if (strides[i] != 0) {
-                store_size *= dims[i];
-            }
+    for (index_t i = 0; i < dims.size(); ++i) {
+        if (strides[i] != 0) {
+            store_size *= dims[i];
         }
-        return store_size;
     }
+    return store_size;
+}
 
     template<typename T>
     const Shape& Tensor<T>::get_shape() const {
         return shape;
+    }
+
+    template<typename T>
+    index_t Tensor<T>::get_offset() const {
+        return offset_;
     }
 
     template<typename T>
@@ -116,31 +129,40 @@ private:
     }
 
     template<typename T>
-    size_t Tensor<T>::num_elements() const {
+    index_t Tensor<T>::num_elements() const {
         return shape.total_size();
     }
 
-
     template<typename T>
-    bool Tensor<T>::is_contiguous_in_range(const int start_dim,int end_dim) const{
-        const auto& shape = get_shape().dims();
-        const auto& strides = get_strides();
-        const auto& steps = get_steps();
-        size_t expected_stride = 1;
-        if(end_dim == -1) end_dim += shape.size();
+    bool Tensor<T>::is_contiguous_in_range(const index_t start_dim, index_t end_dim) const {
+        const std::vector<index_t>& shape = get_shape().dims();
+        const std::vector<index_t>& strides = get_strides();
 
-        for (int i = end_dim; i >= start_dim; --i) {
-            if (strides[i] == 0) return false;
-            if (steps[i] != 1 &&  steps[i] != -1) return false;
-            if (strides[i] != expected_stride) {
+        if (shape.empty() || (shape.size() == 1 && shape[0] == 0)) {
+            return true;
+        }
+
+        if (end_dim == -1) {
+            end_dim = shape.size() - 1;
+        }
+
+        if (start_dim > end_dim || end_dim >= shape.size()) {
+            throw std::invalid_argument("Invalid dimension range");
+        }
+        index_t expected_stride = 1;
+
+        for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
+            if (i <= end_dim && i >= start_dim && shape[i] != 1 && strides[i] != expected_stride) {
                 return false;
             }
             expected_stride *= shape[i];
         }
         return true;
     }
+
     template<typename T>
     const CPUTensorOps<T>* Tensor<T>::CpuOps = nullptr;
+
 } // namespace Breeze
 
 #endif // TENSOR_H

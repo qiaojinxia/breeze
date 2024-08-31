@@ -10,7 +10,7 @@
 #include "platform/SIMDFactory.h"
 
 namespace Breeze {
-
+    using index_t = int64_t;
     struct CPUDevice {};
     struct GPUDevice {};
 
@@ -20,7 +20,7 @@ namespace Breeze {
     template <typename T>
     class TensorStorage<T, CPUDevice> {
     public:
-        explicit TensorStorage(const size_t size)
+        explicit TensorStorage(const index_t size)
             : total_size_(size), padding_size_(0), data_(nullptr) {
             allocate_memory();
         }
@@ -54,14 +54,14 @@ namespace Breeze {
             return *this;
         }
 
-        void copy_to_device(const T* host_data, const size_t size) {
+        void copy_to_device(const T* host_data, const index_t size) {
             if (size != total_size_) {
                 throw std::runtime_error("Size mismatch in copy_to_device");
             }
             std::memcpy(data_, host_data, size * sizeof(T));
         }
 
-        void copy_to_host(T* host_data, const size_t size) const {
+        void copy_to_host(T* host_data, const index_t size) const {
             if (size != total_size_) {
                 throw std::runtime_error("Size mismatch in copy_to_host");
             }
@@ -71,14 +71,14 @@ namespace Breeze {
         T* data() { return data_; }
         const T* data() const { return data_; }
 
-        [[nodiscard]] size_t total_size() const { return padding_size_; }
-        [[nodiscard]] size_t total_bytes() const { return padding_size_ * sizeof(T); }
+        [[nodiscard]] index_t total_size() const { return padding_size_; }
+        [[nodiscard]] index_t total_bytes() const { return padding_size_ * sizeof(T); }
 
     private:
         void allocate_memory() {
-            constexpr size_t alignment = 64;
-            const size_t size = total_size_ * sizeof(T);
-            const size_t padded_size = (size + alignment - 1) & ~(alignment - 1);
+            constexpr index_t alignment = 64;
+            const index_t size = total_size_ * sizeof(T);
+            const index_t padded_size = (size + alignment - 1) & ~(alignment - 1);
             data_ = static_cast<T*>(aligned_alloc(alignment, padded_size));
             if (data_ == nullptr) {
                 throw std::bad_alloc();
@@ -93,69 +93,70 @@ namespace Breeze {
             }
         }
 
-        size_t total_size_;
-        size_t padding_size_;
+        index_t total_size_;
+        index_t padding_size_;
         T* data_;
     };
 
     class Shape {
     public:
-        explicit Shape(std::vector<size_t> dims) : dims_(std::move(dims)) {}
-        Shape(const std::initializer_list<size_t> dims) : dims_(dims) {}
-        Shape() : dims_({}) {}
+        explicit Shape(std::vector<index_t> dims) : dims_(std::move(dims)), strides_(compute_strides()) {}
+        Shape(const std::initializer_list<index_t> dims) : dims_(dims), strides_(compute_strides()) {}
+        Shape() : dims_({}), strides_({}) {}
 
         // 禁用复制
         Shape(const Shape&) = delete;
         Shape& operator=(const Shape&) = delete;
 
         // 允许移动
-        Shape(Shape&& other) noexcept : dims_(std::move(other.dims_)) {}
+        Shape(Shape&& other) noexcept : dims_(std::move(other.dims_)), strides_(std::move(other.strides_)) {}
 
         Shape& operator=(Shape&& other) noexcept {
             if (this != &other) {
                 dims_ = std::move(other.dims_);
+                strides_ = std::move(other.strides_);
             }
             return *this;
         }
 
-        [[nodiscard]] size_t dim(const size_t axis) const {
+        [[nodiscard]] index_t dim(const index_t axis) const {
             if (axis >= dims_.size()) {
                 throw std::out_of_range("Axis out of range");
             }
             return dims_[axis];
         }
 
-        [[nodiscard]] size_t ndim() const {
-            return dims_.size();
+        [[nodiscard]] index_t ndim() const {
+            return static_cast<index_t>(dims_.size());
         }
 
-        [[nodiscard]] size_t total_size() const {
+        [[nodiscard]] index_t total_size() const {
             if (dims_.empty())
                 return 1;
-            return std::accumulate(dims_.begin(), dims_.end(), 1ULL, std::multiplies<>());
+            return std::accumulate(dims_.begin(), dims_.end(), static_cast<index_t>(1), std::multiplies<>());
         }
 
-        [[nodiscard]] const std::vector<size_t>& dims() const {
+        [[nodiscard]] const std::vector<index_t>& dims() const {
             return dims_;
         }
 
         [[nodiscard]] std::string dims_str() const {
             std::string s = "[";
             s += std::accumulate(std::begin(dims_), std::end(dims_), std::string{},
-                [](const std::string& a, const size_t b) {
+                [](const std::string& a, const index_t b) {
                     return a.empty() ? std::to_string(b) : a + "," + std::to_string(b);
                 });
             s += "]";
             return s;
         }
 
-        [[nodiscard]] std::vector<size_t> strides() const {
-            return Utils::compute_strides(this->dims());
+        [[nodiscard]] const std::vector<index_t>& strides() const {
+            return strides_;
         }
 
         friend std::ostream& operator<<(std::ostream& os, const Shape& shape) {
             os << '(';
-            for (size_t i = 0; i < shape.dims_.size(); ++i) {
+            for (index_t i = 0; i < shape.dims_.size(); ++i) {
                 os << shape.dims_[i];
                 if (i != shape.dims_.size() - 1) {
                     os << ", ";
@@ -173,8 +174,19 @@ namespace Breeze {
             return !(*this == other);
         }
 
+        [[nodiscard]] std::vector<index_t> compute_strides() const {
+            std::vector<index_t> strides(dims_.size());
+            if (!dims_.empty()) {
+                strides.back() = 1;
+                for (index_t i = static_cast<index_t>(dims_.size()) - 1; i > 0; --i) {
+                    strides[i - 1] = strides[i] * dims_[i];
+                }
+            }
+            return strides;
+        }
     private:
-        std::vector<size_t> dims_;
+        std::vector<index_t> dims_;
+        std::vector<index_t> strides_;
     };
 }
 

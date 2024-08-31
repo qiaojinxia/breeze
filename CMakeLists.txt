@@ -100,6 +100,8 @@ set(HEADERS
         src/platform/SIMDOps.h
         src/platform/SIMDFactory.h
         ${SIMD_HEADERS}
+        src/platform/Vectorized.cpp
+        src/platform/Vectorized.h
 )
 
 # 添加可执行文件
