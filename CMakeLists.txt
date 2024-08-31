@@ -10,12 +10,12 @@ find_package(Armadillo REQUIRED)
 # 设置 SIMD 指令集和相关源文件
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
     add_definitions(-DUSE_NEON)
-    set(SIMD_SOURCES src/platform/NEONOps.cpp)
-    set(SIMD_HEADERS src/platform/NEONOps.h)
+#    set(SIMD_SOURCES src/platform/NEONOps.cpp)
+    set(SIMD_HEADERS src/platform/VectorizedAvx2.h)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     add_definitions(-DUSE_AVX2)
-    set(SIMD_SOURCES src/platform/AVX2Ops.cpp)
-    set(SIMD_HEADERS src/platform/AVX2Ops.h)
+#    set(SIMD_SOURCES src/platform/AVX2Ops.cpp)
+    set(SIMD_HEADERS src/platform/VectorizedNeon.h)
 else()
     message(WARNING "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}. Using scalar operations.")
 endif()
@@ -97,11 +97,9 @@ set(HEADERS
         src/common/Utils.h
         src/tests/test_cases.h
         src/TensorIterator.h
-        src/platform/SIMDOps.h
         src/platform/SIMDFactory.h
         ${SIMD_HEADERS}
-        src/platform/Vectorized.cpp
-        src/platform/Vectorized.h
+        src/platform/VectorizedAvx2.h
 )
 
 # 添加可执行文件

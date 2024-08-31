@@ -5,25 +5,11 @@
 #ifndef BREEZE_SIMDFACTORY_H
 #define BREEZE_SIMDFACTORY_H
 
-#include "SIMDOps.h"
 
 #ifdef USE_AVX2
-#include "AVX2Ops.h"
+#include "VectorizedAvx2.h"
 #elif defined(USE_NEON)
-#include "NEONOps.h"
+#include "VectorizedNeon.h"
 #endif
-
-namespace Breeze {
-
-    template<typename T>
-    const SIMDOps<T>& getSIMDOps() {
-        #ifdef USE_AVX2
-                return AVX2Ops<T>::getInstance();
-        #elif defined(USE_NEON)
-                return NEONOps<T>::getInstance();
-        #endif
-    }
-
-} // namespace Breeze
 
 #endif // BREEZE_SIMDFACTORY_H

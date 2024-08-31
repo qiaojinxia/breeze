@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <omp.h>
-#include "./platform/Vectorized.h"
+#include "./platform/VectorizedAvx2.h"
 
 namespace Breeze {
 
@@ -75,10 +75,13 @@ namespace Breeze {
 
         void build() {
             shape_ = compute_common_shape();
-            auto new_shape = Shape(std::vector<index_t>(shape_.begin(), shape_.end()));
-            out_tensor->set_initial_shape(new_shape);
+            if (!shape_.empty() && out_tensor->get_shape().dims() != shape_) {
+                auto new_shape = Shape(std::vector<index_t>(shape_.begin(), shape_.end()));
+                out_tensor->set_initial_shape(new_shape);
+            }
+
             operands_.push_back(OperandInfo{out_tensor->mutable_data(), out_tensor->get_strides(),
-                out_tensor->get_offset(), true, true});
+            out_tensor->get_offset(), true, true});
             tensors_.push_back(out_tensor);
 
             is_contiguous_ = true;
@@ -286,8 +289,7 @@ namespace Breeze {
                           T* output_ptr, const index_t size, std::index_sequence<I...>) {
             for (index_t i = 0; i + Vectorized<T>::size() < size; i += Vectorized<T>::size()) {
                 // Use SIMD-enabled function if the block size is large enough and type is SIMD-capable
-                auto vec_ptrs = std::tuple(Vectorized<T>::loadu(data_ptrs[I] + i)...);
-                op(output_ptr + i, std::get<I>(vec_ptrs)...); // Call op with SIMD-loaded vectors
+                op(output_ptr + i, Vectorized<T>::loadu(data_ptrs[I] + i)...);
             }
         }
 
@@ -297,13 +299,13 @@ namespace Breeze {
             auto begin = size - size % Vectorized<T>::size();
             for (index_t i = begin; i < size; i += 1) {
                     // Process each element in the block using scalar operations
-                    op(output_ptr + i, data_ptrs[I]+ i...); // Pass output pointer correctly for scalar op
+                    op(output_ptr + i, data_ptrs[I]+ i...);
             }
         }
 
         template<typename ScalarOp, typename VectorOp>
         void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,const std::array<T*, function_traits<ScalarOp>::arity>& data_ptrs_scalar,
-             const std::array<T*, function_traits<VectorOp>::arity>& data_ptrs_vector, T* output_ptr, const index_t size) {
+                const std::array<T*, function_traits<VectorOp>::arity>& data_ptrs_vector, T* output_ptr, const index_t size) {
             constexpr size_t num_operands = function_traits<VectorOp>::arity -1;
             vectorized_loop_impl(vector_op, data_ptrs_vector, output_ptr, size, std::make_index_sequence<num_operands>{});
             // If not vectorized, fall back to the scalar implementation
@@ -358,6 +360,8 @@ namespace Breeze {
         }
 
         static std::vector<index_t> expand_strides(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
+            if (shape.empty())
+                return strides;
             std::vector<index_t> result(shape.size(), 0);
             const index_t offset = static_cast<index_t>(shape.size()) - 1 - static_cast<index_t>(strides.size());
             for (size_t i = 0; i < strides.size(); ++i) {
@@ -368,7 +372,7 @@ namespace Breeze {
 
         std::vector<index_t> compute_common_shape() {
             if (tensors_.empty()) {
-                return {};
+                return out_tensor->get_shape().dims();
             }
             std::vector<index_t> common_shape = tensors_[0]->get_shape().dims();
             for (size_t i = 1; i < tensors_.size(); ++i) {

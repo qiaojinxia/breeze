@@ -248,9 +248,8 @@ namespace Breeze {
 
     template<typename T>
     void CPUTensor<T>::fill(T value) {
-        if (is_contiguous()) {
-            const auto& ops = getSIMDOps<T>();
-            ops.fill(this->mutable_data(), value, this->align_size());
+        if (is_contiguous() && !this->get_shape().dims().empty()) {
+            this->getOps()->fill(*this, value);
             return;
         }
         fill([&](const std::vector<index_t>& _) {return value;});
