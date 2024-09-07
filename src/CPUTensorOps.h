@@ -14,17 +14,17 @@ namespace Breeze {
         Multiply,
         Divide
     };
-    template<typename T>
-    class CPUTensorOps final: public TensorOps<T>{
+    template<typename Dtype>
+    class CPUTensorOps final: public TensorOps<Dtype>{
     public:
 
-        void fill(Tensor<T>& a, T value) const override;
+        void fill(Tensor<Dtype>& a, Dtype value) const override;
 
-        [[nodiscard]] std::shared_ptr<Tensor<T>> add(const Tensor<T>& a, const Tensor<T>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> subtract(const Tensor<T>& a, const Tensor<T>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> divide(const Tensor<T>& a, const Tensor<T>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> multiply(const Tensor<T>& a, const Tensor<T>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<T>> matmul(const Tensor<T>& a, const Tensor<T>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> add(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> subtract(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> divide(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> multiply(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> matmul(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
 
         ~CPUTensorOps() override= default;
 

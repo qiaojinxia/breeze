@@ -1333,14 +1333,41 @@ public:
     }
 
 
-    static void test_add() {
-        const auto a = CPUTensor<float>({1000,1000,1000},2);
-        const auto b = CPUTensor<float>({1000,1000,1000},4);
-        // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
-        MEASURE_TIME(a - b);
-        MEASURE_TIME(a + b);
-        // const auto c = b + a;
-        // std::cout << *c << std::endl;
+    static void test_OP() {
+        {
+            const auto a = CPUTensor<float>({1000,1000,1000},1);
+            const auto b = CPUTensor<float>({1000,1000,1000},4);
+            // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+            MEASURE_TIME(a - b);
+            MEASURE_TIME(a + b);
+            // const auto c = b + a;
+            // std::cout << *c << std::endl;
+        }
+
+        // {
+        //     auto a = CPUTensor<float>({20,20,20},2);
+        //     const auto a_s = a.slice({"::2","::2","::2"});
+        //     auto b = CPUTensor<float>({20,20,20},4);
+        //     const auto b_s = b.slice({"::2","::2","::2"});
+        //     // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+        //     const auto c = *a_s + *b_s;
+        //     // MEASURE_TIME(a + b);
+        //     // MEASURE_TIME(*a_s + *b_s);
+        //     std::cout << *c << std::endl;
+        // }
+
+
+        // {
+        //     auto a = CPUTensor<float>({20,20,20},2);
+        //     const auto a_s = a.slice({"::2","::2"});
+        //     auto b = CPUTensor<float>({20,20,20},4);
+        //     const auto b_s = b.slice({"::2","::2"});
+        //     // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+        //     const auto c = *a_s + *b_s;
+        //     MEASURE_TIME(a + b);
+        //     MEASURE_TIME(*a_s + *b_s);
+        //     // std::cout << *c << std::endl;
+        // }
     }
 
     static void test_slice() {
@@ -1445,7 +1472,7 @@ public:
     // 运行所有测试
     static void run_all_tests() {
         // test_expand();
-        test_add();
+        test_OP();
         // test_slice();
         // test_repeat();
         // test_stack();

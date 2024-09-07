@@ -112,8 +112,8 @@ public:
         return result;
     }
 
-    template<typename T>
-    static void compare_tensor_data(const T* tensor_data, const std::vector<std::vector<T>>& expected, float epsilon = 1e-6) {
+    template<typename Dtype>
+    static void compare_tensor_data(const Dtype* tensor_data, const std::vector<std::vector<Dtype>>& expected, float epsilon = 1e-6) {
         index_t index = 0;
         for (index_t i = 0; i < static_cast<index_t>(expected.size()); ++i) {
             for (index_t j = 0; j < static_cast<index_t>(expected[i].size()); ++j) {
