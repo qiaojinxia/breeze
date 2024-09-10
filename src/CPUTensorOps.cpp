@@ -42,21 +42,19 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<Dtype>>();
         auto iter = TensorIterator<Dtype>::binary_op(*result, a, b);
 
-        iter.for_each([](Dtype** data, size_t size) {
+        iter.for_each([](Dtype** data, const std::vector<index_t>& strides, size_t size) {
             Dtype* destination = data[0];
             const Dtype* a_ptr = data[1];
             const Dtype* b_ptr = data[2];
-
+            const index_t destination_stride = strides[0];
+            const index_t a_stride = strides[1];
+            const index_t b_stride = strides[2];
             if constexpr (std::is_same_v<Dtype, float>) {
-                cblas_scopy(size, a_ptr, 1, destination, 1);
-                cblas_saxpy(size, -1.0f, b_ptr, 1, destination, 1);
+                cblas_scopy(size, a_ptr, a_stride, destination, destination_stride);
+                cblas_saxpy(size, -1.0f, b_ptr, b_stride, destination, destination_stride);
             } else if constexpr (std::is_same_v<Dtype, double>) {
-                cblas_dcopy(size, a_ptr, 1, destination, 1);
-                cblas_daxpy(size, -1.0, b_ptr, 1, destination, 1);
-            } else {
-                for (size_t i = 0; i < size; ++i) {
-                    destination[i] = a_ptr[i] - b_ptr[i];
-                }
+                cblas_dcopy(size, a_ptr, a_stride, destination, destination_stride);
+                cblas_daxpy(size, -1.0, b_ptr, b_stride, destination, destination_stride);
             }
         });
 
