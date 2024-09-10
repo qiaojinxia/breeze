@@ -25,7 +25,6 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<Dtype>> divide(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<Dtype>> multiply(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<Dtype>> matmul(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-
         ~CPUTensorOps() override= default;
 
     };
