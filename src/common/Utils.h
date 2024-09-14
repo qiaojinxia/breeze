@@ -9,9 +9,7 @@
 #include <tuple>
 #include <iostream>
 #include <cstdarg>
-
-using index_t = int64_t;
-
+#include "Macro.h"
 class Utils {
 public:
     // 计算 strides 的函数
@@ -112,8 +110,8 @@ public:
         return result;
     }
 
-    template<typename Dtype>
-    static void compare_tensor_data(const Dtype* tensor_data, const std::vector<std::vector<Dtype>>& expected, float epsilon = 1e-6) {
+    template<typename scalar_t>
+    static void compare_tensor_data(const scalar_t* tensor_data, const std::vector<std::vector<scalar_t>>& expected, float epsilon = 1e-6) {
         index_t index = 0;
         for (index_t i = 0; i < static_cast<index_t>(expected.size()); ++i) {
             for (index_t j = 0; j < static_cast<index_t>(expected[i].size()); ++j) {

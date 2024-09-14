@@ -8,17 +8,17 @@
 #include <numeric>
 #include "common/Utils.h"
 #include "platform/SIMDFactory.h"
+#include "./common/Macro.h"
 
 namespace Breeze {
-    using index_t = int64_t;
     struct CPUDevice {};
     struct GPUDevice {};
 
-    template <typename T, typename DeviceType>
+    template <typename ScalarType, typename DeviceType>
     class TensorStorage;
 
-    template <typename T>
-    class TensorStorage<T, CPUDevice> {
+    template <typename ScalarType>
+    class TensorStorage<ScalarType, CPUDevice> {
     public:
         explicit TensorStorage(const index_t size)
             : total_size_(size), padding_size_(0), data_(nullptr) {
@@ -54,36 +54,36 @@ namespace Breeze {
             return *this;
         }
 
-        void copy_to_device(const T* host_data, const index_t size) {
+        void copy_to_device(const ScalarType* host_data, const index_t size) {
             if (size != total_size_) {
                 throw std::runtime_error("Size mismatch in copy_to_device");
             }
-            std::memcpy(data_, host_data, size * sizeof(T));
+            std::memcpy(data_, host_data, size * sizeof(ScalarType));
         }
 
-        void copy_to_host(T* host_data, const index_t size) const {
+        void copy_to_host(ScalarType* host_data, const index_t size) const {
             if (size != total_size_) {
                 throw std::runtime_error("Size mismatch in copy_to_host");
             }
-            std::memcpy(host_data, data_, size * sizeof(T));
+            std::memcpy(host_data, data_, size * sizeof(ScalarType));
         }
 
-        T* data() { return data_; }
-        const T* data() const { return data_; }
+        ScalarType* data() { return data_; }
+        const ScalarType* data() const { return data_; }
 
         [[nodiscard]] index_t total_size() const { return padding_size_; }
-        [[nodiscard]] index_t total_bytes() const { return padding_size_ * sizeof(T); }
+        [[nodiscard]] index_t total_bytes() const { return padding_size_ * sizeof(ScalarType); }
 
     private:
         void allocate_memory() {
             constexpr index_t alignment = 64;
-            const index_t size = total_size_ * sizeof(T);
+            const index_t size = total_size_ * sizeof(ScalarType);
             const index_t padded_size = (size + alignment - 1) & ~(alignment - 1);
-            data_ = static_cast<T*>(aligned_alloc(alignment, padded_size));
+            data_ = static_cast<ScalarType*>(aligned_alloc(alignment, padded_size));
             if (data_ == nullptr) {
                 throw std::bad_alloc();
             }
-            padding_size_ = padded_size / sizeof(T);
+            padding_size_ = padded_size / sizeof(ScalarType);
         }
 
         void deallocate_memory() {
@@ -95,7 +95,7 @@ namespace Breeze {
 
         index_t total_size_;
         index_t padding_size_;
-        T* data_;
+        ScalarType* data_;
     };
 
     class Shape {

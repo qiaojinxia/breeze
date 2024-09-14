@@ -2,171 +2,175 @@
 #include <stdexcept>
 #include "omp.h"
 #include <cblas.h>
+#include "CPUTensorOps.h"
+
 namespace Breeze {
-    template<typename Dtype>
-    CPUTensor<Dtype>::~CPUTensor() = default;
+    template<typename ScalarType>
+    CPUTensor<ScalarType>::~CPUTensor() = default;
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(Shape shape)
-        : Tensor<Dtype>(std::move(shape), Device::CPU),
-          memory_block_(std::make_shared<TensorStorage<Dtype, CPUDevice>>(this->get_shape().total_size())) {
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(Shape shape)
+        : Tensor<scalar_t>(std::move(shape), Device::CPU),
+          memory_block_(std::make_shared<TensorStorage<scalar_t, CPUDevice>>(this->get_shape().total_size())) {
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(std::vector<index_t> shape)
-        : Tensor<Dtype>(Shape(std::move(shape)), Device::CPU) {
-        memory_block_ = std::make_shared<TensorStorage<Dtype, CPUDevice>>(this->get_shape().total_size());
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(std::vector<index_t> shape)
+        : Tensor<scalar_t>(Shape(std::move(shape)), Device::CPU) {
+        memory_block_ = std::make_shared<TensorStorage<scalar_t, CPUDevice>>(this->get_shape().total_size());
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(const std::initializer_list<index_t> shape)
-        : Tensor<Dtype>(Shape(shape), Device::CPU),
-          memory_block_(std::make_shared<TensorStorage<Dtype, CPUDevice>>(this->get_shape().total_size())) {
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(const std::initializer_list<index_t> shape)
+        : Tensor<scalar_t>(Shape(shape), Device::CPU),
+          memory_block_(std::make_shared<TensorStorage<scalar_t, CPUDevice>>(this->get_shape().total_size())) {
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(const CPUTensor& other)
-        : Tensor<Dtype>(Shape(std::vector<index_t>(other.get_shape().dims().begin(), other.get_shape().dims().end())), Device::CPU),
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(const CPUTensor& other)
+        : Tensor<scalar_t>(Shape(std::vector<index_t>(other.get_shape().dims().begin(), other.get_shape().dims().end())), Device::CPU),
           memory_block_(other.memory_block_) {
         this->offset_ = other.offset_;  // Use base class offset_
         this->strides_ = other.strides_;  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(const CPUTensor& other, std::vector<index_t>&& shape)
-        : Tensor<Dtype>(Shape(shape), Device::CPU),
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(const CPUTensor& other, std::vector<index_t>&& shape)
+        : Tensor<scalar_t>(Shape(shape), Device::CPU),
           memory_block_(other.memory_block_) {
         this->offset_ = other.offset_;  // Use base class offset_
         this->strides_ = std::move(other.strides_);  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(Shape shape, Dtype value)
-        : Tensor<Dtype>(std::move(shape), Device::CPU),
-          memory_block_(std::make_shared<TensorStorage<Dtype, CPUDevice>>(this->get_shape().total_size())) {
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(Shape shape, scalar_t value)
+        : Tensor<scalar_t>(std::move(shape), Device::CPU),
+          memory_block_(std::make_shared<TensorStorage<scalar_t, CPUDevice>>(this->get_shape().total_size())) {
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
         fill(value);
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor()
-        : Tensor<Dtype>(Shape{}, Device::CPU),
-          memory_block_(std::make_shared<TensorStorage<Dtype, CPUDevice>>(1)) {
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor()
+        : Tensor<scalar_t>(Shape{}, Device::CPU),
+          memory_block_(std::make_shared<TensorStorage<scalar_t, CPUDevice>>(1)) {
         this->strides_ = {};  // Initialize base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(std::shared_ptr<TensorStorage<Dtype, CPUDevice>> data,
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(std::shared_ptr<TensorStorage<scalar_t, CPUDevice>> data,
                             const index_t offset, std::vector<index_t> shape, std::vector<index_t> strides)
-        : Tensor<Dtype>(Shape(std::move(shape)), Device::CPU),
+        : Tensor<scalar_t>(Shape(std::move(shape)), Device::CPU),
           memory_block_(data) {
         this->offset_ = offset;  // Use base class offset_
         this->strides_ = std::move(strides);  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(std::shared_ptr<TensorStorage<Dtype, CPUDevice>> data,
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(std::shared_ptr<TensorStorage<scalar_t, CPUDevice>> data,
                             const index_t offset, std::vector<index_t> shape)
-        : Tensor<Dtype>(Shape(std::move(shape)), Device::CPU),
+        : Tensor<scalar_t>(Shape(std::move(shape)), Device::CPU),
           memory_block_(data) {
         this->offset_ = offset;  // Use base class offset_
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
     }
 
-    template<typename Dtype>
-    CPUTensor<Dtype>::CPUTensor(std::shared_ptr<TensorStorage<Dtype, CPUDevice>> data, std::vector<index_t> shape)
-        : Tensor<Dtype>(Shape(std::move(shape)), Device::CPU),
+    template<typename scalar_t>
+    CPUTensor<scalar_t>::CPUTensor(std::shared_ptr<TensorStorage<scalar_t, CPUDevice>> data, std::vector<index_t> shape)
+        : Tensor<scalar_t>(Shape(std::move(shape)), Device::CPU),
           memory_block_(data) {
         this->strides_ = this->get_shape().compute_strides();  // Use base class strides_
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::set_initial_shape(Shape& shape) {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::set_initial_shape(Shape& shape) {
         this->shape = std::move(shape);
-        memory_block_ = std::make_shared<TensorStorage<Dtype, CPUDevice>>(this->get_shape().total_size());
+        memory_block_ = std::make_shared<TensorStorage<scalar_t, CPUDevice>>(this->get_shape().total_size());
     }
 
-
-    template<typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::randn(std::vector<index_t> shape) {
+    template<typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::randn(std::vector<index_t> shape) {
         const index_t seed = std::chrono::system_clock::now().time_since_epoch().count();
         std::default_random_engine generator(seed);
         return randn(shape, generator);
     }
 
-    template<typename Dtype>
-    bool CPUTensor<Dtype>::isSafeToModify(const std::shared_ptr<Tensor<Dtype>> tensor) {
-        auto currentTensor = std::dynamic_pointer_cast<CPUTensor>(tensor);
-        return currentTensor->memory_block_.use_count() == 1;
-    }
-
-    template<typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::randn(std::vector<index_t>& shape,
-                                              std::default_random_engine& generator) {
+    template<typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::randn(std::vector<index_t>& shape,
+                                          std::default_random_engine& generator) {
         // 创建一个新的 CPUTensor
         auto tensor = std::make_shared<CPUTensor>(Shape(std::move(shape)));
 
-        // 创建标准正态分布
-        std::normal_distribution<Dtype> distribution(0.0, 1.0);
+        // 获取线程数
+        int num_threads = omp_get_max_threads();
 
-        #pragma omp parallel for
-        // 填充张量with随机数
-        for (index_t i = 0; i < tensor->align_size(); ++i) {
-            tensor->mutable_data()[i] = distribution(generator);
+        // 为每个线程创建一个随机数生成器
+        std::vector<std::default_random_engine> generators(num_threads);
+        std::vector<std::normal_distribution<scalar_t>> distributions(num_threads);
+
+        // 初始化每个线程的随机数生成器
+        for (int i = 0; i < num_threads; ++i) {
+            generators[i] = std::default_random_engine(generator());
+            distributions[i] = std::normal_distribution<scalar_t>(0.0, 1.0);
+        }
+
+        #pragma omp parallel
+        {
+            int thread_id = omp_get_thread_num();
+            auto& local_generator = generators[thread_id];
+            auto& local_distribution = distributions[thread_id];
+
+            #pragma omp for
+            for (index_t i = 0; i < tensor->align_size(); ++i) {
+                tensor->mutable_data()[i] = local_distribution(local_generator);
+            }
         }
 
         return tensor;
     }
 
-    template<typename Dtype>
-    Dtype  CPUTensor<Dtype>::operator[](const std::string& index) const{
+    template<typename scalar_t>
+    scalar_t CPUTensor<scalar_t>::operator[](const std::string& index) const{
         //todo
         return this->at({1,2,3});
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::operator+(const Tensor<Dtype>& rhs) const {
-        return Tensor<Dtype>::getOps()->add(*this, rhs);
+    template<typename scalar_t>
+    template<typename ScalarT2>
+    std::shared_ptr<Tensor<typename BinaryOpResultType<scalar_t, ScalarT2>::type>> CPUTensor<scalar_t>::operator+(const Tensor<ScalarT2>& rhs) const{
+        return CPUTensorOps<scalar_t, ScalarT2>::getInstance().add(*this, rhs);
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::operator-(const Tensor<Dtype>& rhs) const {
-        return Tensor<Dtype>::getOps()->subtract(*this, rhs);
+    template<typename scalar_t>
+    std::shared_ptr<TensorBase> CPUTensor<scalar_t>::operator+(const TensorBase& rhs) const {
+        if (const auto* pFloat = dynamic_cast<const CPUTensor<float>*>(&rhs)) {
+            return CPUTensorOps<scalar_t, float>::getInstance().add(*this, *pFloat);
+        } else if (const auto* pDouble = dynamic_cast<const CPUTensor<double>*>(&rhs)) {
+            return CPUTensorOps<scalar_t, double>::getInstance().add(*this, *pDouble);
+        } else {
+            throw std::runtime_error("Addition between tensors of different scalar types is not supported.");
+        }
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::operator*(const Tensor<Dtype>& rhs) const {
-        return Tensor<Dtype>::getOps()->multiply(*this, rhs);
-    }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::operator/(const Tensor<Dtype>& rhs) const {
-        return Tensor<Dtype>::getOps()->divide(*this, rhs);
-    }
-
-    template<typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::matmul(const Tensor<Dtype>& rhs) const {
-        return Tensor<Dtype>::getOps()->matmul(*this, rhs);
-    }
-
-    template<typename Dtype>
-    index_t CPUTensor<Dtype>::n_bytes() const  {
+    template<typename scalar_t>
+    index_t CPUTensor<scalar_t>::n_bytes() const  {
         return memory_block_->total_bytes();
     }
 
-    template<typename Dtype>
-    [[nodiscard]] std::vector<index_t> CPUTensor<Dtype>::get_strides() const {
+    template<typename scalar_t>
+    [[nodiscard]] std::vector<index_t> CPUTensor<scalar_t>::get_strides() const {
         if (!this->strides_.empty()) {
             return this->strides_;
         }
         return this->get_shape().strides();
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::reshape(const std::vector<index_t>& new_shape) const {
+    template<typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::reshape(const std::vector<index_t>& new_shape) const {
         if (new_shape.empty()) {
             throw std::invalid_argument("New shape cannot be empty");
         }
@@ -221,42 +225,42 @@ namespace Breeze {
     }
 
 
-    template<typename Dtype>
-    Dtype* CPUTensor<Dtype>::mutable_data() {
+    template<typename scalar_t>
+    scalar_t* CPUTensor<scalar_t>::mutable_data() {
         return memory_block_->data();
     }
 
-    template<typename Dtype>
-    [[nodiscard]] const Dtype* CPUTensor<Dtype>::data() const {
+    template<typename scalar_t>
+    [[nodiscard]] const scalar_t* CPUTensor<scalar_t>::data() const {
         return memory_block_->data();
     }
 
-    template<typename Dtype>
-    [[nodiscard]] index_t CPUTensor<Dtype>::align_size() const {
+    template<typename scalar_t>
+    [[nodiscard]] index_t CPUTensor<scalar_t>::align_size() const {
        return memory_block_->total_size();
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::to_cpu() {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::to_cpu() {
         // Already on CPU, do nothing
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::to_gpu() {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::to_gpu() {
         throw std::runtime_error("GPU not supported for CPUTensor");
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::fill(Dtype value) {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::fill(scalar_t value) {
         if (is_contiguous() && !this->get_shape().dims().empty()) {
-            this->getOps()->fill(*this, value);
+            CPUTensorOps<scalar_t>::getInstance().fill(*this, value);
             return;
         }
         fill([&](const std::vector<index_t>& _) {return value;});
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::fill(const std::function<Dtype(const std::vector<index_t>&)>& value_func) {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::fill(const std::function<scalar_t(const std::vector<index_t>&)>& value_func) {
         std::vector<index_t> indices(this->get_shape().ndim(), 0);
         const std::vector<index_t>& shape = this->get_shape().dims();
         const std::vector<index_t>& strides = this->get_strides();
@@ -280,13 +284,13 @@ namespace Breeze {
         }
     }
 
-    template <typename Dtype>
-    bool CPUTensor<Dtype>::is_contiguous() const {
+    template <typename scalar_t>
+    bool CPUTensor<scalar_t>::is_contiguous() const {
        return this->is_contiguous_in_range(0, -1);
     }
 
-    template<typename Dtype>
-    const Dtype& CPUTensor<Dtype>::at(const std::vector<index_t>& indices) const {
+    template<typename scalar_t>
+    const scalar_t& CPUTensor<scalar_t>::at(const std::vector<index_t>& indices) const {
         index_t offset = this->offset_;
         auto strides = this->get_strides();
         for (index_t i = 0; i < indices.size(); ++i) {
@@ -295,19 +299,19 @@ namespace Breeze {
         return memory_block_->data()[offset];
     }
 
-    template<typename Dtype>
-    void CPUTensor<Dtype>::set_value(const std::vector<index_t>& indices, Dtype value) {
+    template<typename scalar_t>
+    void CPUTensor<scalar_t>::set_value(const std::vector<index_t>& indices, scalar_t value) {
         index_t offset = this->offset_;
         const std::vector<index_t>& strides = this->get_strides();
         for (index_t i = 0; i < indices.size(); ++i) {
             offset += indices[i] * strides[i];
         }
-        Dtype* data_ptr = &memory_block_->data()[offset];
+        scalar_t* data_ptr = &memory_block_->data()[offset];
         *data_ptr = value;
     }
 
-    template<typename Dtype>
- void CPUTensor<Dtype>::print(std::ostream& os) const {
+    template<typename scalar_t>
+ void CPUTensor<scalar_t>::print(std::ostream& os) const {
         const auto& shape_ = this->shape.dims();
         os << "tensor(";
         if (this->shape.ndim() == 0) {
@@ -342,8 +346,8 @@ namespace Breeze {
         os << ")" << std::endl;
     }
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::slice(const std::vector<std::string>& range_strings) {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::slice(const std::vector<std::string>& range_strings) {
 
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
@@ -418,8 +422,8 @@ namespace Breeze {
 
     }
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::transpose(const index_t dim0, const index_t dim1) const {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::transpose(const index_t dim0, const index_t dim1) const {
         const index_t ndim = this->get_shape().ndim();
         std::vector<index_t> new_shape = this->get_shape().dims();
         std::vector<index_t> new_strides = this->get_strides();
@@ -448,8 +452,8 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
     }
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::permute(const std::vector<index_t>& dims) {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::permute(const std::vector<index_t>& dims) {
         const index_t ndim = this->get_shape().ndim();
 
         // 检查维度数量是否匹配
@@ -496,13 +500,13 @@ namespace Breeze {
         );
     }
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::flatten() {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::flatten() {
         return flatten(0,-1);
     }
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::flatten(index_t start_dim, index_t end_dim) {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::flatten(index_t start_dim, index_t end_dim) {
         const index_t ndim = this->get_shape().ndim();
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& origin_strides = get_strides();
@@ -560,8 +564,8 @@ namespace Breeze {
     }
 
 
-    template <typename Dtype>
-    [[nodiscard]] std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::repeat(const std::vector<index_t>& repeats) const {
+    template <typename scalar_t>
+    [[nodiscard]] std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::repeat(const std::vector<index_t>& repeats) const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         std::vector<index_t> new_shape;
         new_shape.reserve(repeats.size());
@@ -588,8 +592,8 @@ namespace Breeze {
         }
 
         auto dst_tensor = std::make_shared<CPUTensor>(new_shape);
-        const Dtype* src_data = this->data();
-        Dtype* dst_data = dst_tensor->mutable_data();
+        const scalar_t* src_data = this->data();
+        scalar_t* dst_data = dst_tensor->mutable_data();
 
         const auto& src_shape = this->shape.dims();
         const index_t src_ndim = this->shape.ndim();
@@ -624,8 +628,8 @@ namespace Breeze {
         return dst_tensor;
     }
 
-    template <typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::contiguous() {
+    template <typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::contiguous() {
         // 如果已经是连续的，直接返回 this 的 shared_ptr
         if (this->is_contiguous()) {
             return this->shared_from_this();
@@ -634,13 +638,13 @@ namespace Breeze {
         return this->clone();
     }
 
-    template <typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::clone() const {
+    template <typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::clone() const {
         const index_t ndim = this->shape.ndim();
 
         const std::vector<index_t> original_shape = this->shape.dims();
         const std::vector<index_t>& original_strides = this->get_strides();
-        const Dtype* src_data = this->data();
+        const scalar_t* src_data = this->data();
 
         // 处理 0 维度（标量）的情况
         if (ndim == 0) {
@@ -650,12 +654,12 @@ namespace Breeze {
         }
 
         auto dst_tensor = std::make_shared<CPUTensor>(Shape{original_shape});
-        Dtype* dst_data = dst_tensor->mutable_data();
+        scalar_t* dst_data = dst_tensor->mutable_data();
         const auto& dst_strides = dst_tensor->get_strides();
 
         // 快速路径：如果源张量是连续的，直接进行整体复制
         if (this->is_contiguous()) {
-            std::memcpy(dst_data, src_data + this->offset_, this->size() * sizeof(Dtype));
+            std::memcpy(dst_data, src_data + this->offset_, this->size() * sizeof(scalar_t));
             return dst_tensor;
         }
 
@@ -682,9 +686,9 @@ namespace Breeze {
 
             //blas 负索引 计算方式还是按照 开始位置 和我们通过末尾方式实现不同 需要转换下
             index_t src_blas_offset = src_inc_step < 0 ? src_offset + (copy_size - 1) * src_inc_step : src_offset;
-            if constexpr (std::is_same_v<Dtype, float>) {
+            if constexpr (std::is_same_v<scalar_t, float>) {
                 cblas_scopy(copy_size, src_data + src_blas_offset, src_inc_step, dst_data + dst_offset, 1);
-            } else if constexpr (std::is_same_v<Dtype, double>) {
+            } else if constexpr (std::is_same_v<scalar_t, double>) {
                 cblas_dcopy(copy_size, src_data + src_blas_offset, src_inc_step, dst_data + dst_offset, 1);
             } else {
                 // 对于其他类型，手动复制以确保正确处理不连续的情况
@@ -698,8 +702,8 @@ namespace Breeze {
     }
 
 
-    template <typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::view(const std::vector<index_t>& new_shape) const {
+    template <typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::view(const std::vector<index_t>& new_shape) const {
         // 检查张量是否连续
         if (!is_contiguous()) {
             throw std::runtime_error("Cannot perform view on non-contiguous tensor");
@@ -747,8 +751,8 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(actual_shape));
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::unsqueeze(const index_t dim) const {
+    template<typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::unsqueeze(const index_t dim) const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
 
@@ -783,8 +787,8 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::squeeze() const {
+    template<typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::squeeze() const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
 
@@ -805,8 +809,8 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
     }
 
-    template<typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::squeeze(const index_t dim) const {
+    template<typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::squeeze(const index_t dim) const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
 
@@ -835,8 +839,8 @@ namespace Breeze {
         return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
     }
 
-    template <typename Dtype>
-    std::shared_ptr<Tensor<Dtype>> CPUTensor<Dtype>::expand(const std::vector<index_t>& new_shape) const {
+    template <typename scalar_t>
+    std::shared_ptr<Tensor<scalar_t>> CPUTensor<scalar_t>::expand(const std::vector<index_t>& new_shape) const {
             const std::vector<index_t>& original_shape = this->get_shape().dims();
             const std::vector<index_t>& original_strides = this->get_strides();
 
@@ -879,8 +883,8 @@ namespace Breeze {
             return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(actual_new_shape), std::move(new_strides));
     }
 
-    template <typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::arange(const Dtype start, const Dtype end, const Dtype step) {
+    template <typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::arange(const scalar_t start, const scalar_t end, const scalar_t step) {
         if (step == 0) {
             throw std::invalid_argument("step must be non-zero");
         }
@@ -900,22 +904,22 @@ namespace Breeze {
         return tensor;
     }
 
-    template <typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::scalar(const Dtype value) {
+    template <typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::scalar(const scalar_t value) {
         std::vector<index_t> shape = {};
         auto tensor = std::make_shared<CPUTensor>(std::move(shape));
         tensor->mutable_data()[0] = value;
         return tensor;
     }
 
-    template <typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::vector(index_t size) {
+    template <typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::vector(index_t size) {
         std::vector<index_t> shape = {size};
         return std::make_shared<CPUTensor>(std::move(shape));
     }
 
-    template <typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::stack(const std::vector<Tensor<Dtype>*>& tensors, index_t dim) {
+    template <typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::stack(const std::vector<Tensor<scalar_t>*>& tensors, index_t dim) {
         if (tensors.empty()) {
             throw std::invalid_argument("No tensors provided for stacking");
         }
@@ -948,14 +952,14 @@ namespace Breeze {
         return result;
     }
 
-    template <typename Dtype>
-    std::shared_ptr<CPUTensor<Dtype>> CPUTensor<Dtype>::cat(const std::vector<Tensor<Dtype>*>& tensors, index_t dim) {
+    template <typename scalar_t>
+    std::shared_ptr<CPUTensor<scalar_t>> CPUTensor<scalar_t>::cat(const std::vector<Tensor<scalar_t>*>& tensors, index_t dim) {
         if (tensors.empty()) {
             throw std::invalid_argument("No tensors provided for concatenation");
         }
 
         if (tensors.size() == 1) {
-            return std::dynamic_pointer_cast<CPUTensor<Dtype>>(tensors[0]->contiguous());
+            return std::dynamic_pointer_cast<CPUTensor<scalar_t>>(tensors[0]->contiguous());
         }
 
         index_t ndim = tensors[0]->get_shape().ndim();
@@ -988,19 +992,19 @@ namespace Breeze {
         }
 
         new_shape[dim] = concat_dim_size;
-        auto result = std::make_shared<CPUTensor<Dtype>>(std::move(new_shape));
+        auto result = std::make_shared<CPUTensor<scalar_t>>(std::move(new_shape));
         combine_tensors_out(tensors, dim, result.get());
         return result;
     }
 
-    template <typename Dtype>
-    void CPUTensor<Dtype>::combine_tensors_out(const std::vector<Tensor<Dtype>*>& tensors, const index_t dim, CPUTensor<Dtype>* result) {
+    template <typename scalar_t>
+    void CPUTensor<scalar_t>::combine_tensors_out(const std::vector<Tensor<scalar_t>*>& tensors, const index_t dim, CPUTensor<scalar_t>* result) {
         if (tensors.empty()) {
             throw std::invalid_argument("No tensors provided for concatenation");
         }
         const index_t ndim = tensors[0]->get_shape().ndim();
         const std::vector<index_t>& new_shape = result->get_shape().dims();
-        Dtype* result_data = result->mutable_data();
+        scalar_t* result_data = result->mutable_data();
 
         // 计算外层循环的次数和步长
         std::vector<index_t> outer_steps(dim);
@@ -1025,7 +1029,7 @@ namespace Breeze {
                 // 计算每次复制的块大小（不包括最后一维）
                 const auto src_tensor = static_cast<CPUTensor*>(tensor);
                 index_t src_offset = src_tensor->offset_;
-                const Dtype* src_data = src_tensor->data();
+                const scalar_t* src_data = src_tensor->data();
                 const std::vector<index_t>& src_strides = src_tensor->get_strides();
                 const std::vector<index_t>& src_shape = src_tensor->get_shape().dims();
 
@@ -1042,7 +1046,7 @@ namespace Breeze {
                 if (src_tensor->is_contiguous() && result->is_contiguous()) {
                     // 使用 memcpy 进行连续内存的复制
                     const index_t copy_size = _block_size * last_dim_size;
-                    std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(Dtype));
+                    std::memcpy(result_data + result_offset, src_data + src_offset, copy_size * sizeof(scalar_t));
                     result_offset += copy_size;
                 } else {
                     // 对于非连续存储，我们使用逐元素复制
@@ -1061,10 +1065,10 @@ namespace Breeze {
                         const index_t src_inc_step = src_strides[ndim-1];
                         index_t src_blas_offset = src_inc_step < 0 ? current_src_offset + (last_dim_size - 1) * src_inc_step : current_src_offset;
 
-                        if constexpr (std::is_same_v<Dtype, float>) {
+                        if constexpr (std::is_same_v<scalar_t, float>) {
                             cblas_scopy(last_dim_size, src_data + src_blas_offset, src_inc_step,
                                         result_data + dst_offset, 1);
-                        } else if constexpr (std::is_same_v<Dtype, double>) {
+                        } else if constexpr (std::is_same_v<scalar_t, double>) {
                             cblas_dcopy(last_dim_size, src_data + src_blas_offset, src_inc_step,
                                         result_data + dst_offset, 1);
                         } else {
@@ -1081,4 +1085,11 @@ namespace Breeze {
     // Explicit instantiation for common types
     template class CPUTensor<float>;
     template class CPUTensor<double>;
+
+    template std::shared_ptr<Tensor<BinaryOpResultType<float,float>::type>> CPUTensor<float>::operator+(const Tensor<float>&) const;
+    template std::shared_ptr<Tensor<BinaryOpResultType<float,double>::type>> CPUTensor<float>::operator+(const Tensor<double>&) const;
+    template std::shared_ptr<Tensor<BinaryOpResultType<double,float>::type>> CPUTensor<double>::operator+(const Tensor<float>&) const;
+    template std::shared_ptr<Tensor<BinaryOpResultType<double,double>::type>> CPUTensor<double>::operator+(const Tensor<double>&) const;
+
+
 } // namespace Breeze

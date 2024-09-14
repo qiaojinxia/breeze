@@ -9,382 +9,485 @@
 #include <algorithm>
 #include <omp.h>
 #include "./platform/VectorizedAvx2.h"
+#include "ScalarType.h"
 
 namespace Breeze {
+    static constexpr index_t GRAIN_SIZE = 131072;
+    static constexpr index_t CACHE_LINE_SIZE = 64;  // Typical cache line size
 
-// Helper struct to deduce function traits
-template<typename F>
-struct function_traits : public function_traits<decltype(&F::operator())> {};
+    // 辅助模板来获取类型包中的最后一个类型
+    template<typename... ScalarTypes>
+    struct last_type;
 
-template<typename C, typename R, typename... Args>
-struct function_traits<R(C::*)(Args...) const> {
-    static constexpr size_t arity = sizeof...(Args);
-};
-
-// Specialization for function pointers
-template<typename R, typename... Args>
-struct function_traits<R(*)(Args...)> {
-    static constexpr size_t arity = sizeof...(Args);
-};
-
-// Specialization for std::function
-template<typename R, typename... Args>
-struct function_traits<std::function<R(Args...)>> {
-    static constexpr size_t arity = sizeof...(Args);
-};
-
-static constexpr index_t GRAIN_SIZE = 131072;
-static constexpr index_t CACHE_LINE_SIZE = 64;  // Typical cache line size
-
-template<typename Dtype>
-class Tensor;
-
-template<typename Dtype>
-class CPUTensor;
-
-template<typename Dtype>
-class TensorIterator {
-public:
-    struct OperandInfo {
-        Dtype* data;
-        std::vector<index_t> strides ={};
-        index_t offset = 0;
-        bool is_output{false};
-        bool is_read_write{false};
+    template<typename ScalarType>
+    struct last_type<ScalarType> {
+        using type = ScalarType;
     };
 
-    TensorIterator() = default;
+    template<typename ScalarType, typename... ScalarTypes>
+    struct last_type<ScalarType, ScalarTypes...> : last_type<ScalarTypes...> {};
 
-    static TensorIterator binary_op(Tensor<Dtype>& out, const Tensor<Dtype>& a, const Tensor<Dtype>& b) {
-        TensorIterator iter;
-        iter.add_input(a);
-        iter.add_input(b);
-        iter.add_output(out);
-        iter.build();
-        return iter;
-    }
+    template<typename... ScalarTypes>
+    using LastScalarType = typename last_type<ScalarTypes...>::type;
 
-    void add_output(Tensor<Dtype>& t) {
-        out_tensor = &t;
-    }
 
-    void add_input(const Tensor<Dtype>& t) {
-        operands_.push_back(OperandInfo{const_cast<Dtype*>(t.data()), t.get_strides(), t.get_offset(), false, false});
-        tensors_.push_back(const_cast<Tensor<Dtype>*>(&t));
-    }
+    template<typename ScalarType>
+    class Tensor;
 
-    void build() {
-        shape_ = compute_common_shape();
-        if (!shape_.empty() && out_tensor->get_shape().dims() != shape_) {
-            auto new_shape = Shape(std::vector<index_t>(shape_.begin(), shape_.end()));
-            out_tensor->set_initial_shape(new_shape);
+    template<typename ScalarType>
+    class CPUTensor;
+
+    template<typename... ScalarTypes>
+    class TensorIterator {
+    public:
+        struct OperandInfo {
+            char* data{};
+            std::vector<index_t> strides ={};
+            std::vector<index_t> strides_bytes ={};
+            index_t begin_offset = 0;
+            bool is_output{false};
+            bool is_read_write{false};
+            ScalarType ScalarType{};
+
+            template <typename T>
+            OperandInfo(T* data, const std::vector<index_t>& strides, const index_t offset,
+                const bool is_output, const bool is_read_write)
+            : data(reinterpret_cast<char*>(data)),
+            strides(strides),
+            begin_offset(offset),
+            is_output(is_output),
+            is_read_write(is_read_write),
+            ScalarType(TypeToScalarType<T>::value) {}
+        };
+
+
+        TensorIterator() = default;
+
+        template<typename ScalarT1, typename ScalarT2>
+        static TensorIterator<ScalarT1,ScalarT2, typename BinaryOpResultType<ScalarT1, ScalarT2>::type>
+        binary_op(Tensor<typename BinaryOpResultType<ScalarT1, ScalarT2>::type> &out,
+            const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) {
+            using OutputType = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+            TensorIterator<ScalarT1, ScalarT2, OutputType> iter;
+            iter.template add_input<0, ScalarT1>(a);
+            iter.template add_input<1, ScalarT2>(b);
+            iter.template add_output<2, OutputType>(out);
+            iter.build(std::make_index_sequence<2>{});
+            return iter;
         }
 
-        operands_.push_back(OperandInfo{out_tensor->mutable_data(), out_tensor->get_strides(),
-        out_tensor->get_offset(), true, true});
-        tensors_.push_back(out_tensor);
-
-        is_contiguous_ = true;
-        common_dim_ = 0;
-        for (const auto& op : operands_) {
-            is_contiguous_ &= is_contiguous(op.strides, shape_);
-            common_dim_ = std::max(common_dim_, shape_.size() - op.strides.size());
+        template<typename InputScalarType, typename OutputScalarType = InputScalarType>
+        static TensorIterator<InputScalarType, OutputScalarType>
+        unary_op(Tensor<OutputScalarType> &out, const Tensor<InputScalarType>& input) {
+            TensorIterator<InputScalarType, OutputScalarType> iter;
+            iter.template add_input<0, InputScalarType>(input);
+            iter.template add_output<1, OutputScalarType>(out);
+            iter.build(std::make_index_sequence<1>{});
+            return iter;
         }
 
-        // for (auto& op : operands_) {
-        //     op.strides = expand_strides(op.strides, shape_);
-        // }
+        template<typename ScalarType>
+        static TensorIterator<ScalarType>
+        nullary_op(Tensor<ScalarType> &out) {
+            TensorIterator<ScalarType> iter;
+            iter.template add_output<0, ScalarType>(out);
+            iter.build(std::make_index_sequence<0>{});
+            return iter;
+        }
 
-        is_inner_contiguous_ = true;
-        for (const auto& op : operands_) {
-            if (op.strides.back() != 1) {
-                is_inner_contiguous_ = false;
-                break;
+        template<std::size_t I = 0>
+        [[nodiscard]] std::vector<index_t> get_shape_from_tuple() const {
+            if constexpr (I == sizeof...(ScalarTypes)) {
+                return {};
+            } else {
+                return std::get<I>(tensors_)->get_shape().dims();
             }
         }
-    }
 
-    template<typename Func>
-    void for_each(Func func) {
-        if (is_contiguous_) {
-            contiguous_for_each(func);
-        } else if (is_inner_contiguous_) {
-            inner_contiguous_for_each(func);
-        } else {
-            strided_for_each(func);
+        // 修改 add_output 方法，确保输出在最后一个模板参数位置
+        template<size_t I = sizeof...(ScalarTypes) - 1, typename ScalarType>
+        void add_output(Tensor<ScalarType>& t) {
+            using OutputType = typename last_type<ScalarTypes...>::type;
+            result_tsize = sizeof(OutputType);
+            std::get<I>(tensors_) = static_cast<Tensor<ScalarType>*>(&t);
         }
-    }
 
-    template<typename ScalarOp, typename VectorOp>
-    void cpu_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
-        if (is_contiguous_) {
-            contiguous_kernel_vec(scalar_op, vector_op);
-        } else if (is_inner_contiguous_) {
-            inner_contiguous_kernel_vec(scalar_op, vector_op);
-        } else {
-            strided_kernel_vec(scalar_op, vector_op);
+        // 修改 add_input 方法，确保输入在前面的模板参数位置
+        template<size_t I, typename ScalarType>
+        void add_input(const Tensor<ScalarType>& t) {
+            operands_.emplace_back(const_cast<ScalarType*>(t.data()), t.get_strides(), t.get_offset(), false, false);
+            std::get<I>(tensors_) = const_cast<Tensor<ScalarType>*>(&t);
         }
-    }
-
-private:
-    Tensor<Dtype>* out_tensor;
-    std::vector<OperandInfo> operands_;
-    std::vector<Tensor<Dtype>*> tensors_;
-    std::vector<index_t> shape_{};
-    bool is_contiguous_{};
-    bool is_inner_contiguous_{};
-    size_t common_dim_{};
 
 
-    template<typename Func>
-    void contiguous_for_each(Func& func) {
-        const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
-        #pragma omp parallel for default(none) \
-        shared(numel, func) \
-        firstprivate(GRAIN_SIZE) \
-        schedule(dynamic, 64)
-        for (index_t i = 0; i < numel; i += GRAIN_SIZE) {
-            const index_t end = std::min(i + GRAIN_SIZE, numel);
-            call_function(func, i, end);
+        template <std::size_t I>
+        void expand_strides_for_operand() {
+                operands_[I].strides = expand_strides(get_shape_from_tuple<I>(), operands_[I].strides, shape_);
         }
-    }
 
-    template<typename Func>
-    void inner_contiguous_for_each(Func& func) {
-        std::vector<index_t> counter(shape_.size() - 1, 0);
-        std::vector<Dtype*> data_ptrs(operands_.size());
-        std::vector<index_t> data_strides(operands_.size());
-        const index_t inner_dim = shape_.back();
-        const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
+        template <std::size_t I>
+        void calc_strides_for_operand() {
+            operands_[I].strides_bytes = calc_strides_bytes(operands_[I].ScalarType, operands_[I].strides);
+        }
 
-        #pragma omp parallel for default(none) \
-        shared(outer_dim, inner_dim, func, operands_, shape_) \
-        private(counter, data_ptrs, data_strides) \
-        firstprivate(GRAIN_SIZE) \
-        schedule(dynamic, 64)
-        for (index_t i = 0; i < outer_dim; i += GRAIN_SIZE) {
-            const index_t end = std::min(i + GRAIN_SIZE, outer_dim);
-            index_to_counter(i, counter);
-            for (index_t j = i; j < end; ++j) {
-                for (size_t op = 0; op < operands_.size(); ++op) {
-                    data_ptrs[op] = operands_[op].data + compute_offset(counter, operands_[op].strides) + operands_[op].offset;
-                    data_strides[op] = 1;
+        template <std::size_t... Is>
+        void build(std::index_sequence<Is...>) {
+
+            shape_ = compute_common_shape(std::make_index_sequence<sizeof...(Is)>{});
+
+            (expand_strides_for_operand<Is>(), ...);
+
+            (calc_strides_for_operand<Is>(), ...);
+
+            if (!shape_.empty() && get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims() != shape_) {
+                auto new_shape = Shape(std::vector(shape_.begin(), shape_.end()));
+                get_tensor<sizeof...(ScalarTypes) - 1>().set_initial_shape(new_shape);
+            }
+
+            using OutPutType = LastScalarType<ScalarTypes...>;
+            operands_.emplace_back(static_cast<OutPutType*>(get_tensor<sizeof...(ScalarTypes) - 1>().mutable_data()),
+                get_tensor<sizeof...(ScalarTypes) - 1>().get_strides(), get_tensor<sizeof...(ScalarTypes) - 1>().get_offset(), true, true);
+            operands_[sizeof ...(ScalarTypes)-1].strides_bytes =
+                calc_strides_bytes(operands_[sizeof ...(ScalarTypes)-1].ScalarType, operands_[sizeof ...(ScalarTypes)-1].strides);
+
+            if (shape_.empty()) {
+                shape_ = std::vector<index_t>(get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims().begin(),
+                get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims().end());
+            }
+
+            is_contiguous_ = true;
+            common_dim_ = 0;
+            for (const auto& op : operands_) {
+                is_contiguous_ &= is_contiguous(op.strides, shape_);
+                common_dim_ = std::max(common_dim_, shape_.size() - op.strides.size());
+            }
+
+            is_inner_contiguous_ = true;
+            for (const auto& op : operands_) {
+                if (op.strides.back() != 1) {
+                    is_inner_contiguous_ = false;
+                    break;
                 }
-                func(data_ptrs.data(), data_strides, inner_dim);
-                increment_counter(counter);
             }
         }
-    }
 
-    template<typename Func>
-    void strided_for_each(Func& func) {
-        std::vector<index_t> counter(shape_.size(), 0);
-        std::vector<Dtype*> data_ptrs(operands_.size());
-        std::vector<index_t> data_strides(operands_.size());
-        const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
-        #pragma omp parallel for default(none) \
-            shared(numel, func, operands_, shape_) \
-            private(counter, data_ptrs, data_strides) \
-            firstprivate(GRAIN_SIZE)   \
+        template<typename Func>
+        void for_each(Func func) {
+            if (is_contiguous_) {
+                contiguous_for_each(func);
+            } else if (is_inner_contiguous_) {
+                inner_contiguous_for_each(func);
+            } else {
+                strided_for_each(func);
+            }
+        }
+
+        template<typename ScalarOp, typename VectorOp>
+        void cpu_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
+            if (is_contiguous_) {
+                contiguous_kernel_vec(scalar_op, vector_op);
+            } else if (is_inner_contiguous_) {
+                inner_contiguous_kernel_vec(scalar_op, vector_op);
+            } else {
+                strided_kernel_vec(scalar_op, vector_op);
+            }
+        }
+
+    private:
+        std::vector<OperandInfo> operands_;
+        std::tuple<Tensor<ScalarTypes>*...> tensors_;
+        std::vector<index_t> shape_{};
+        bool is_contiguous_{};
+        bool is_inner_contiguous_{};
+        size_t common_dim_{};
+        size_t result_tsize = 1;
+
+
+        template<size_t I>
+        auto& get_tensor() {
+            return *std::get<I>(tensors_);
+        }
+
+        template<typename Func>
+        void contiguous_for_each(Func& func) {
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            #pragma omp parallel for default(none) \
+            shared(numel, func) \
+            firstprivate(GRAIN_SIZE) \
             schedule(dynamic, 64)
-        {
             for (index_t i = 0; i < numel; i += GRAIN_SIZE) {
                 const index_t end = std::min(i + GRAIN_SIZE, numel);
+                call_function(func, i, end);
+            }
+        }
+
+        template<typename Func>
+        void inner_contiguous_for_each(Func& func) {
+            std::vector<index_t> counter(shape_.size() - 1, 0);
+            std::vector<void*> data_ptrs(operands_.size());
+            std::vector<index_t> data_strides(operands_.size());
+            const index_t inner_dim = shape_.back();
+            const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
+
+            #pragma omp parallel for default(none) \
+            shared(outer_dim, inner_dim, func, operands_, shape_) \
+            private(counter, data_ptrs, data_strides) \
+            firstprivate(GRAIN_SIZE) \
+            schedule(dynamic, 64)
+            for (index_t i = 0; i < outer_dim; i += GRAIN_SIZE) {
+                const index_t end = std::min(i + GRAIN_SIZE, outer_dim);
                 index_to_counter(i, counter);
                 for (index_t j = i; j < end; ++j) {
                     for (size_t op = 0; op < operands_.size(); ++op) {
-                        data_ptrs[op] = operands_[op].data + compute_offset(counter, operands_[op].strides) + operands_[op].offset;
-                        data_strides[op] = operands_[op].strides.back();
+                        data_ptrs[op] = operands_[op].data + result_tsize * operands_[op].begin_offset +
+                            compute_offset(counter, operands_[op].strides_bytes);
+                        data_strides[op] = 1;
                     }
-                    func(data_ptrs.data(), data_strides, 1);
+                    func(data_ptrs.data(), data_strides, inner_dim);
                     increment_counter(counter);
                 }
             }
         }
-    }
 
-    template<typename ScalarOp, typename VectorOp>
-    void contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
-        const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
-        std::array<Dtype*, std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity)> data_ptrs;
-
-        #pragma omp parallel for default(none) \
-        shared(numel, scalar_op, vector_op, operands_, shape_) \
-        private(data_ptrs) \
-        firstprivate(GRAIN_SIZE) \
-        schedule(dynamic, 64)
-        for (index_t i = 0; i < numel; i += GRAIN_SIZE) {
-            const index_t end = std::min(i + GRAIN_SIZE, numel);
-            for (size_t j = 0; j < data_ptrs.size(); ++j) {
-                data_ptrs[j] = operands_[j].data + i +  operands_[j].offset;
-            }
-            Dtype* output_ptr = operands_.back().data + i +  operands_.back().offset;
-            op_loop(scalar_op, vector_op, data_ptrs, output_ptr, end - i);
-        }
-    }
-
-    template<typename ScalarOp, typename VectorOp>
-            void inner_contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
-        const index_t inner_dim = shape_.back();
-        const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
-        std::array<Dtype*, std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity)> data_ptrs;
-
-        #pragma omp parallel for default(none) \
-        shared(outer_dim, scalar_op, vector_op, shape_, inner_dim, operands_) \
-        private(data_ptrs) \
-        schedule(dynamic, 64)
-        for (index_t i = 0; i < outer_dim; ++i) {
-            std::vector<index_t> counter(shape_.size() - 1, 0);
-            index_to_counter(i, counter);
-
-            for (size_t j = 0; j < data_ptrs.size(); ++j) {
-                data_ptrs[j] = operands_[j].data + compute_offset(counter, operands_[j].strides) + operands_[j].offset;
-            }
-
-            Dtype* output_ptr = operands_.back().data + compute_offset(counter, operands_.back().strides);
-            op_loop(scalar_op, vector_op, data_ptrs, output_ptr, inner_dim);
-        }
-    }
-
-    template<typename ScalarOp, typename VectorOp>
-    void strided_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
-        const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
-        constexpr index_t grain_size = GRAIN_SIZE;
-        std::array<Dtype*, std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity)> data_ptrs;
-
-        for (index_t i = 0; i < numel; i += grain_size) {
+        template<typename Func>
+        void strided_for_each(Func& func) {
             std::vector<index_t> counter(shape_.size(), 0);
-            const index_t end = std::min(i + grain_size, numel);
-            index_to_counter(i, counter);
-
-            for (index_t j = i; j < end; ++j) {
-                for (size_t k = 0; k < data_ptrs.size(); ++k) {
-                    data_ptrs[k] = operands_[k].data + compute_offset(counter, operands_[k].strides) + operands_[k].offset;
+            std::vector<void*> data_ptrs(operands_.size());
+            std::vector<index_t> data_strides(operands_.size());
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            #pragma omp parallel for default(none) \
+                shared(numel, func, operands_, shape_) \
+                private(counter, data_ptrs, data_strides) \
+                firstprivate(GRAIN_SIZE)   \
+                schedule(dynamic, 64)
+            {
+                for (index_t i = 0; i < numel; i += GRAIN_SIZE) {
+                    const index_t end = std::min(i + GRAIN_SIZE, numel);
+                    index_to_counter(i, counter);
+                    for (index_t j = i; j < end; ++j) {
+                        for (size_t op = 0; op < operands_.size(); ++op) {
+                            data_ptrs[op] =  operands_[op].data + operands_[op].begin_offset * result_tsize +
+                                compute_offset(counter, operands_[op].strides_bytes);
+                            data_strides[op] = operands_[op].strides.back();
+                        }
+                        func(data_ptrs.data(), data_strides, 1);
+                        increment_counter(counter);
+                    }
                 }
-
-                Dtype* output_ptr = operands_.back().data + compute_offset(counter, operands_.back().strides) + operands_.back().offset;
-                constexpr size_t num_operands = std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity) - 1;
-                scalar_loop_impl(scalar_op, data_ptrs, output_ptr, 1, std::make_index_sequence<num_operands>{});
-                increment_counter(counter);
             }
         }
-    }
 
-    template<typename Func>
-    void call_function(Func& func, const index_t start, const index_t end) {
-        std::vector<Dtype*> data_ptrs(operands_.size());
-        std::vector<index_t> data_strides(operands_.size());
-        for (size_t i = 0; i < operands_.size(); ++i) {
-            data_ptrs[i] = operands_[i].data + start * operands_[i].strides.back() + operands_[i].offset;
-            data_strides[i] = 1;
+        template<typename ScalarOp, typename VectorOp>
+        void contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
+
+            #pragma omp parallel for default(none) \
+            shared(numel, scalar_op, vector_op, operands_, shape_) \
+            private(data_ptrs) \
+            firstprivate(GRAIN_SIZE) \
+            schedule(dynamic, 64)
+            for (index_t i = 0; i < numel; i += GRAIN_SIZE) {
+                const index_t end = std::min(i + GRAIN_SIZE, numel);
+                for (size_t j = 0; j < data_ptrs.size(); ++j) {
+                    data_ptrs[j] =  operands_[j].data +  operands_[j].begin_offset * result_tsize;
+                }
+                char* output_ptr = data_ptrs[sizeof ...(ScalarTypes) -1];
+                op_loop(scalar_op, vector_op, data_ptrs, output_ptr, end - i);
+            }
         }
-        func(data_ptrs.data(), data_strides, end - start);
-    }
 
-    template< typename VectorOp, size_t... I>
-    void vectorized_loop_impl(VectorOp& op, const std::array<Dtype*, function_traits<VectorOp>::arity>& data_ptrs,
-                      Dtype* output_ptr, const index_t size, std::index_sequence<I...>) {
-        for (index_t i = 0; i + Vectorized<Dtype>::size() <= size; i += Vectorized<Dtype>::size()) {
-            // Use SIMD-enabled function if the block size is large enough and type is SIMD-capable
-            op(output_ptr + i, Vectorized<Dtype>::loadu(data_ptrs[I] + i)...);
+        template<typename ScalarOp, typename VectorOp>
+                void inner_contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
+            const index_t inner_dim = shape_.back();
+            const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
+            std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
+
+            #pragma omp parallel for default(none) \
+            shared(outer_dim, scalar_op, vector_op, shape_, inner_dim, operands_) \
+            private(data_ptrs) \
+            schedule(dynamic, 64)
+            for (index_t i = 0; i < outer_dim; ++i) {
+                std::vector<index_t> counter(shape_.size() - 1, 0);
+                index_to_counter(i, counter);
+                for (size_t j = 0; j < data_ptrs.size(); ++j) {
+                    data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * result_tsize +
+                        compute_offset(counter, operands_[j].strides_bytes);
+                }
+                char* output_ptr = data_ptrs.back();
+                op_loop(scalar_op, vector_op, data_ptrs, output_ptr, inner_dim);
+            }
         }
-    }
 
-    template<typename ScalarOp, size_t... I>
-    void scalar_loop_impl(ScalarOp& op, const std::array<Dtype*, function_traits<ScalarOp>::arity>& data_ptrs,
-                  Dtype* output_ptr, const index_t size, std::index_sequence<I...>) {
-        auto begin = size - size % Vectorized<Dtype>::size();
-        for (index_t i = begin; i < size; i += 1) {
-                // Process each element in the block using scalar operations
-                op(output_ptr + i, data_ptrs[I]+ i...);
+        template<typename ScalarOp, typename VectorOp>
+        void strided_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            constexpr index_t grain_size = GRAIN_SIZE;
+            std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
+
+            for (index_t i = 0; i < numel; i += grain_size) {
+                std::vector<index_t> counter(shape_.size(), 0);
+                const index_t end = std::min(i + grain_size, numel);
+                index_to_counter(i, counter);
+
+                for (index_t j = i; j < end; ++j) {
+                    for (size_t k = 0; k < data_ptrs.size(); ++k) {
+                        data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * result_tsize +
+                            compute_offset(counter, operands_[k].strides_bytes);
+                    }
+                    constexpr size_t num_operands = sizeof...(ScalarTypes) - 1;
+                    // scalar_loop_impl(scalar_op, data_ptrs, output_ptr, 1, std::make_index_sequence<num_operands>{});
+                    increment_counter(counter);
+                }
+            }
         }
-    }
 
-    template<typename ScalarOp, typename VectorOp>
-    void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,
-                 const std::array<Dtype*, std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity)>& data_ptrs,
-                 Dtype* output_ptr, const index_t size) {
-        constexpr size_t num_operands = std::max(function_traits<ScalarOp>::arity, function_traits<VectorOp>::arity) - 1;
-        vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, std::make_index_sequence<num_operands>{});
-        scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, std::make_index_sequence<num_operands>{});
-    }
+        template<typename Func>
+        void call_function(Func& func, const index_t start, const index_t end) {
+            std::vector<char*> data_ptrs(sizeof ...(ScalarTypes));
+            std::vector<index_t> data_strides(sizeof ...(ScalarTypes));
+            for (size_t i = 0; i < sizeof ...(ScalarTypes); ++i) {
+                data_ptrs[i] = operands_[i].data +  start * operands_[i].strides_bytes.back() + operands_[i].begin_offset;
+                data_strides[i] = 1;
+            }
+            func(data_ptrs.data(), data_strides, end - start);
+        }
 
-    void increment_counter(std::vector<index_t>& counter) const {
-        for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
-            if (++counter[i] == shape_[i]) {
-                counter[i] = 0;
+        template<typename VectorOp, size_t... I>
+        static void vectorized_loop_impl(VectorOp& op, const std::array<char*, sizeof...(ScalarTypes)>& data_ptrs,
+                              char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
+            using ResultScalarType = typename last_type<ScalarTypes...>::type;
+            for (index_t i = 0; i + simd_vector_size <= size; i += simd_vector_size) {
+                op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
+                     Vectorized<ResultScalarType>::loadu(data_ptrs[I] + i * sizeof (ResultScalarType))...);
+            }
+        }
+
+        template<typename ScalarOp, size_t... I>
+        static void scalar_loop_impl(ScalarOp& op, const std::array<char*, sizeof...(ScalarTypes)> &data_ptrs,
+            char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
+
+            const auto begin = size - size % simd_vector_size;
+            using ResultScalarType = typename last_type<ScalarTypes...>::type;
+            for (index_t i = begin; i < size; i += 1) {
+                //这里 不同类型转换使用默认编译器规则
+                op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
+                   *reinterpret_cast<ResultScalarType*>(data_ptrs[I]) + i...);
+            }
+        }
+
+        template<typename ScalarOp, typename VectorOp>
+        void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,
+            const std::array<char*, sizeof...(ScalarTypes)> &data_ptrs, char* output_ptr, const index_t size) {
+            using LastVectorized = Vectorized<LastScalarType<ScalarTypes...>>;
+            constexpr size_t simd_vector_size = LastVectorized::size();
+            const index_t scalar_size = size - (size % simd_vector_size);
+            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
+            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, scalar_size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
+        }
+
+        void increment_counter(std::vector<index_t>& counter) const {
+            for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
+                if (++counter[i] == shape_[i]) {
+                    counter[i] = 0;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        void index_to_counter(index_t index, std::vector<index_t>& counter) const {
+            for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
+                counter[i] = index % shape_[i];
+                index /= shape_[i];
+            }
+        }
+
+        static bool is_contiguous(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
+            index_t expected_stride = 1;
+            for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
+                if (shape[i] == 1) continue;
+                if (strides[i] != expected_stride) return false;
+                expected_stride *= shape[i];
+            }
+            return true;
+        }
+
+        static std::vector<index_t> expand_strides(const std::vector<index_t>& input_shape,
+                                           const std::vector<index_t>& strides,
+                                           const std::vector<index_t>& output_shape) {
+            if (output_shape.empty()) {
+                return strides;
+            }
+
+            std::vector<index_t> result(output_shape.size(), 0);
+            const index_t offset = static_cast<index_t>(output_shape.size()) - static_cast<index_t>(input_shape.size());
+
+            for (index_t i = 0; i < static_cast<index_t>(input_shape.size()); ++i) {
+                if (i < strides.size()) {
+                    if (input_shape[i] == output_shape[i + offset]) {
+                        result[i + offset] = strides[i];
+                    } else if (input_shape[i] == 1) {
+                        // 处理广播情况
+                        result[i + offset] = 0;
+                    }
+                } else {
+                    // 如果 strides 比 input_shape 短，用默认值填充
+                    result[i + offset] = (input_shape[i] == output_shape[i + offset]) ? 1 : 0;
+                }
+            }
+
+            // 处理前面的维度（可能是因为广播而新增的维度）
+            for (index_t i = 0; i < offset; ++i) {
+                result[i] = 0;  // 新增的维度的stride为0
+            }
+
+            // 确保至少有一个非零stride
+            if (std::all_of(result.begin(), result.end(), [](const index_t x) { return x == 0; })) {
+                result.back() = 1;
+            }
+
+            return result;
+        }
+
+        static std::vector<index_t> broadcast_shapes(const std::vector<index_t>& a, const std::vector<index_t>& b) {
+            std::vector<index_t> result(std::max(a.size(), b.size()));
+            auto it_a = a.rbegin();
+            auto it_b = b.rbegin();
+            auto it_result = result.rbegin();
+            while (it_a != a.rend() || it_b != b.rend()) {
+                index_t dim_a = (it_a != a.rend()) ? *it_a : 1;
+                index_t dim_b = (it_b != b.rend()) ? *it_b : 1;
+                if (dim_a != dim_b && dim_a != 1 && dim_b != 1) {
+                    throw std::runtime_error("Incompatible shapes for broadcasting");
+                }
+                *it_result = std::max(dim_a, dim_b);
+                if (it_a != a.rend()) ++it_a;
+                if (it_b != b.rend()) ++it_b;
+                ++it_result;
+            }
+            return result;
+        }
+
+        template<std::size_t... Is>
+        std::vector<index_t> compute_common_shape(std::index_sequence<Is...>) {
+            if constexpr (sizeof...(Is) == 0) {
+                return {};
+            } else if constexpr (sizeof...(Is) == 1) {
+                return get_shape_from_tuple<0>();
             } else {
-                break;
+                return broadcast_shapes(get_shape_from_tuple<Is>()...);
             }
         }
-    }
 
-    void index_to_counter(index_t index, std::vector<index_t>& counter) const {
-        for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
-            counter[i] = index % shape_[i];
-            index /= shape_[i];
-        }
-    }
-
-    static bool is_contiguous(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
-        index_t expected_stride = 1;
-        for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
-            if (shape[i] == 1) continue;
-            if (strides[i] != expected_stride) return false;
-            expected_stride *= shape[i];
-        }
-        return true;
-    }
-
-    static std::vector<index_t> broadcast_shapes(const std::vector<index_t>& a, const std::vector<index_t>& b) {
-        std::vector<index_t> result(std::max(a.size(), b.size()));
-        auto it_a = a.rbegin();
-        auto it_b = b.rbegin();
-        auto it_result = result.rbegin();
-        while (it_a != a.rend() || it_b != b.rend()) {
-            index_t dim_a = (it_a != a.rend()) ? *it_a : 1;
-            index_t dim_b = (it_b != b.rend()) ? *it_b : 1;
-            if (dim_a != dim_b && dim_a != 1 && dim_b != 1) {
-                throw std::runtime_error("Incompatible shapes for broadcasting");
+        [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides_bytes) {
+            index_t offset = 0;
+            for (size_t i = 0; i < counter.size(); ++i) {
+                offset += counter[i] * strides_bytes[i];
             }
-            *it_result = std::max(dim_a, dim_b);
-            if (it_a != a.rend()) ++it_a;
-            if (it_b != b.rend()) ++it_b;
-            ++it_result;
+            return offset;
         }
-        return result;
-    }
-
-    static std::vector<index_t> expand_strides(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
-        if (shape.empty())
-            return strides;
-        std::vector<index_t> result(shape.size(), 0);
-        const index_t offset = static_cast<index_t>(shape.size()) - 1 - static_cast<index_t>(strides.size());
-        for (size_t i = 0; i < strides.size(); ++i) {
-            result[i + offset] = (shape[i + offset] == 1) ? 0 : strides[i];
-        }
-        return result;
-    }
-
-    std::vector<index_t> compute_common_shape() {
-        if (tensors_.empty()) {
-            return out_tensor->get_shape().dims();
-        }
-        std::vector<index_t> common_shape = tensors_[0]->get_shape().dims();
-        for (size_t i = 1; i < tensors_.size(); ++i) {
-            common_shape = broadcast_shapes(common_shape, tensors_[i]->get_shape().dims());
-        }
-        return common_shape;
-    }
-
-    [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides) {
-        index_t offset = 0;
-        for (size_t i = 0; i < counter.size(); ++i) {
-            offset += counter[i] * strides[i];
-        }
-        return offset;
-    }
-};
+    };
 }
 
 #endif //TENSORITERATOR_H

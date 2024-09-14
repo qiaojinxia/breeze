@@ -1335,12 +1335,20 @@ public:
 
     static void test_OP() {
         {
-            const auto a = CPUTensor<float>({1000,1000,1000},1);
-            const auto b = CPUTensor<float>({1000,1000,1000},4);
+            const Tensor<float> *a = new CPUTensor<float>({10, 10, 10},1);
+            const Tensor<float> *b = new CPUTensor<float>({10, 10, 10},4);
             // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
-            MEASURE_TIME(a - b);
-            MEASURE_TIME(a + b);
-            // const auto c = b + a;
+            // MEASURE_TIME(a - b);
+            // MEASURE_TIME(*a + *b);
+
+
+            // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
+            // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
+            // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+            // // MEASURE_TIME(a - b);
+            // // MEASURE_TIME(a + b);
+            // std::cout << a << std::endl;
+            // const auto c = *b + *a;
             // std::cout << *c << std::endl;
         }
 

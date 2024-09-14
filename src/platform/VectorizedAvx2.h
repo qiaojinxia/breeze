@@ -42,12 +42,12 @@ namespace Breeze {
             return Vectorized(_mm256_div_ps(values, other.values));
         }
 
-        static Vectorized loadu(const void* ptr) {
-            return Vectorized(_mm256_loadu_ps(static_cast<const float*>(ptr)));
+        static Vectorized loadu(const char* ptr) {
+            return Vectorized(_mm256_loadu_ps(reinterpret_cast<const float*>(ptr)));
         }
 
-        void store(void* ptr) const {
-            _mm256_storeu_ps(static_cast<float*>(ptr), values);
+        void store(float* ptr) const {
+            _mm256_storeu_ps(ptr, values);
         }
     };
 
@@ -82,12 +82,12 @@ namespace Breeze {
             return Vectorized(_mm256_div_pd(values, other.values));
         }
 
-        static Vectorized loadu(const void* ptr) {
-            return Vectorized(_mm256_loadu_pd(static_cast<const double*>(ptr)));
+        static Vectorized loadu(const char* ptr) {
+            return Vectorized(_mm256_loadu_pd(reinterpret_cast<const double*>(ptr)));
         }
 
-        void store(void* ptr) const {
-            _mm256_storeu_pd(static_cast<double*>(ptr), values);
+        void store(double* ptr) const {
+            _mm256_storeu_pd(ptr, values);
         }
     };
 

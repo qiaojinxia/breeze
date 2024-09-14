@@ -4,6 +4,9 @@
 
 #ifndef MACRO_H
 #define MACRO_H
+
+using index_t = int64_t;
+
 // 定义宏来测量代码段的运行时间
 #define MEASURE_TIME(code_to_measure) do { \
     auto start = std::chrono::high_resolution_clock::now(); \

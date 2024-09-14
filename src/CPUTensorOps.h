@@ -1,7 +1,3 @@
-//
-// Created by mac on 2024/7/31.
-//
-
 #ifndef CPUTENSOROPS_H
 #define CPUTENSOROPS_H
 #include <vector>
@@ -14,23 +10,40 @@ namespace Breeze {
         Multiply,
         Divide
     };
-    template<typename Dtype>
-    class CPUTensorOps final: public TensorOps<Dtype>{
+
+    template<typename... ScalarTypes>
+    class CPUTensorOps final : public TensorOps<ScalarTypes...> {
     public:
+        using BaseOps = TensorOps<ScalarTypes...>;
+        using ScalarT1 = typename BaseOps::ScalarT1;
+        using ScalarT2 = typename BaseOps::effective_ScalarT2;
+        using scalar_result = typename BaseOps::scalar_ResultTypeype;
 
-        void fill(Tensor<Dtype>& a, Dtype value) const override;
+        void fill(Tensor<ScalarT1>& a, ScalarT1 value) const override;
 
-        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> add(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> subtract(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> divide(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> multiply(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<Dtype>> matmul(const Tensor<Dtype>& a, const Tensor<Dtype>& b) const override;
-        ~CPUTensorOps() override= default;
+        // 删除拷贝构造函数和赋值操作符
+        CPUTensorOps(const CPUTensorOps&) = delete;
+        CPUTensorOps& operator=(const CPUTensorOps&) = delete;
 
+        // 静态方法获取单例实例
+        static const CPUTensorOps& getInstance() {
+            static CPUTensorOps instance;
+            return instance;
+        }
+
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> add(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> subtract(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> divide(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> multiply(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> matmul(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+
+    private:
+        // 私有构造函数
+        CPUTensorOps() = default;
+        // 虚析构函数
+        ~CPUTensorOps() override = default;
     };
 
 }
-
-
 
 #endif //CPUTENSOROPS_H

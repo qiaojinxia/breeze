@@ -100,6 +100,7 @@ set(HEADERS
         src/platform/SIMDFactory.h
         ${SIMD_HEADERS}
         src/platform/VectorizedAvx2.h
+        src/ScalarType.h
 )
 
 # 添加可执行文件
