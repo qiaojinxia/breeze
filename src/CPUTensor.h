@@ -26,11 +26,13 @@ namespace Breeze {
         CPUTensor(std::shared_ptr<TensorStorage<ScalarType, CPUDevice>> data, std::vector<index_t> shape);
 
         ScalarType operator[](const std::string& index) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> sin() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> cos() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> tan() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> atan() const override;
 
-        template<typename ScalarT2>
-        std::shared_ptr<Tensor<typename BinaryOpResultType<ScalarType, ScalarT2>::type>> operator+(const Tensor<ScalarT2>& rhs) const;
-
-        std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> pow(const TensorBase& rhs) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const override;
 
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> reshape(const std::vector<index_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> slice(const std::vector<std::string>& range_strings) override;

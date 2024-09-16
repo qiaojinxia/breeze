@@ -5,86 +5,100 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Armadillo REQUIRED)
+# Detect operating system and architecture
+if(APPLE)
+    set(IS_MACOS TRUE)
+elseif(WIN32)
+    set(IS_WINDOWS TRUE)
+else()
+    set(IS_LINUX TRUE)
+endif()
 
-# 设置 SIMD 指令集和相关源文件
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
+    set(IS_ARM TRUE)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+    set(IS_X86_64 TRUE)
+endif()
+
+if(IS_MACOS)
+    if(IS_ARM)
+        set(HOMEBREW_PREFIX "/opt/homebrew")
+    else()
+        set(HOMEBREW_PREFIX "/usr/local")
+    endif()
+    message(STATUS "Using Homebrew prefix: ${HOMEBREW_PREFIX}")
+else()
+    message(WARNING "Unsupported platform")
+endif()
+
+# Set compiler flags
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra -O3)
+    if(IS_X86_64)
+        add_compile_options(-mavx2)
+    endif()
+elseif(MSVC)
+    add_compile_options(/W4 /O2)
+    if(IS_X86_64)
+        add_compile_options(/arch:AVX2)
+    endif()
+endif()
+
+# Set SIMD instruction set and related source files
+if(IS_ARM)
     add_definitions(-DUSE_NEON)
-#    set(SIMD_SOURCES src/platform/NEONOps.cpp)
-    set(SIMD_HEADERS src/platform/VectorizedAvx2.h)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    add_definitions(-DUSE_AVX2)
-#    set(SIMD_SOURCES src/platform/AVX2Ops.cpp)
     set(SIMD_HEADERS src/platform/VectorizedNeon.h)
+elseif(IS_X86_64)
+    add_definitions(-DUSE_AVX2)
+    set(SIMD_HEADERS src/platform/VectorizedAvx2.h)
 else()
     message(WARNING "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}. Using scalar operations.")
 endif()
 
-# 查找 OpenBLAS
-if(APPLE)
+# Find required packages
+
+if(IS_MACOS)
+    # Use Clang as the compiler
     set(CMAKE_C_COMPILER clang)
     set(CMAKE_CXX_COMPILER clang++)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-        set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas")
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-        set(OpenBLAS_ROOT "/usr/local/opt/openblas")
-    endif()
+    # Manually specify SLEEF installation directory if not found
+    set(SLEEF_ROOT "${HOMEBREW_PREFIX}/opt/sleef")
+    find_package(SLEEF REQUIRED PATHS ${SLEEF_ROOT})
+    set(SLEEF_LIB "${HOMEBREW_PREFIX}/lib/libsleef.3.dylib")
+
+    set(OpenBLAS_ROOT "${HOMEBREW_PREFIX}/opt/openblas")
     find_path(OpenBLAS_INCLUDE_DIR NAMES cblas.h PATHS ${OpenBLAS_ROOT}/include NO_DEFAULT_PATH)
     find_library(OpenBLAS_LIB NAMES openblas PATHS ${OpenBLAS_ROOT}/lib NO_DEFAULT_PATH)
-else()
-    find_package(OpenBLAS REQUIRED)
-endif()
 
-# 查找 OpenMP 库
-find_package(OpenMP COMPONENTS CXX)
-if(OpenMP_CXX_FOUND)
-    set(OpenMP_CXX_FLAGS ${OpenMP_CXX_FLAGS})
-    set(OpenMP_CXX_LIB_NAMES "omp")
-    set(OpenMP_omp_LIBRARY OpenMP::OpenMP_CXX)
-else()
-    if(APPLE)
-        if(CMAKE_C_COMPILER_ID MATCHES "Clang\$")
-            set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
-            set(OpenMP_C_LIB_NAMES "omp")
-            set(OpenMP_omp_LIBRARY omp)
-        endif()
-
-        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang\$")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
-            set(OpenMP_CXX_LIB_NAMES "omp")
-            set(OpenMP_omp_LIBRARY omp)
-        endif()
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include")
-            set(OpenMP_CXX_LIB_NAMES "omp")
-            set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
-            set(OpenMP_CXX_INCLUDE_DIRS "/opt/homebrew/opt/libomp/include")
-        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
-            set(OpenMP_CXX_LIB_NAMES "omp")
-            set(OpenMP_omp_LIBRARY "/usr/local/opt/libomp/lib/libomp.dylib")
-            set(OpenMP_CXX_INCLUDE_DIRS "/usr/local/opt/libomp/include")
-        endif()
-    else()
-        set(OpenMP_CXX_FLAGS "-fopenmp")
-        set(OpenMP_CXX_LIB_NAMES "gomp")
-        find_library(OpenMP_LIBS NAMES gomp)
-        set(OpenMP_LIBS ${OpenMP_gomp_LIBRARY})
+    if(NOT OpenBLAS_INCLUDE_DIR OR NOT OpenBLAS_LIB)
+        message(FATAL_ERROR "OpenBLAS not found. Please install it using Homebrew: brew install openblas")
     endif()
+
+    message(STATUS "OpenBLAS include dir: ${OpenBLAS_INCLUDE_DIR}")
+    message(STATUS "OpenBLAS library: ${OpenBLAS_LIB}")
+
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${HOMEBREW_PREFIX}/opt/libomp/include")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY "${HOMEBREW_PREFIX}/opt/libomp/lib/libomp.dylib")
+    set(OpenMP_CXX_INCLUDE_DIRS "${HOMEBREW_PREFIX}/opt/libomp/include")
+
+
 endif()
 
-find_package(OpenMP REQUIRED)
-# 定义源文件
+find_package(Armadillo REQUIRED)
+find_package(SLEEF REQUIRED)
+find_package(OpenMP COMPONENTS CXX)
+find_package(OpenBLAS REQUIRED)
+# Define source files
 set(SOURCES
         src/main.cpp
         src/node.cpp
         src/CPUTensorOps.cpp
         src/CPUTensor.cpp
         src/TensorIterator.cpp
-        ${SIMD_SOURCES}
 )
 
-# 定义头文件
+# Define header files
 set(HEADERS
         src/node.h
         src/loss_functions.h
@@ -99,42 +113,34 @@ set(HEADERS
         src/TensorIterator.h
         src/platform/SIMDFactory.h
         ${SIMD_HEADERS}
-        src/platform/VectorizedAvx2.h
         src/ScalarType.h
 )
 
-# 添加可执行文件
+# Add executable
 add_executable(breeze ${SOURCES} ${HEADERS})
 
-# 添加编译定义
+# Add compile definitions
 target_compile_definitions(breeze PRIVATE
         ACCELERATE_NEW_LAPACK
         ACCELERATE_LAPACK_ILP64
 )
 
-# 设置编译选项
-
-
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    target_compile_options(breeze PRIVATE "-mavx2")
-endif()
-
-
-# 设置包含目录
+# Set include directories
 target_include_directories(breeze PRIVATE
         ${ARMADILLO_INCLUDE_DIRS}
         ${OpenBLAS_INCLUDE_DIR}
+        ${SLEEF_INCLUDE_DIRS}
         ${OpenMP_CXX_INCLUDE_DIRS}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# 链接库
+# Link libraries
 target_link_libraries(breeze PRIVATE
         ${ARMADILLO_LIBRARIES}
         ${OpenBLAS_LIB}
         OpenMP::OpenMP_CXX
-
+        ${SLEEF_LIB}
 )
 
-# 确保使用 C++17
+# Ensure C++17 is used
 target_compile_features(breeze PRIVATE cxx_std_17)

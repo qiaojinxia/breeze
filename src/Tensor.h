@@ -16,6 +16,18 @@ enum class Device {
 class TensorBase {
 public:
     virtual ~TensorBase() = default;
+    virtual void print(std::ostream& os) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> sin() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> cos() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> tan() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> atan() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> pow(const TensorBase& other) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& other) const = 0;
+private:
+    friend std::ostream& operator<<(std::ostream& os, const TensorBase& tensor) {
+        tensor.print(os);
+        return os;
+    }
 };
 
 template<typename ScalarType>
@@ -33,9 +45,6 @@ public:
 
     // Pure virtual methods
     virtual ScalarType operator[](const std::string& index) const = 0;
-
-
-    virtual std::shared_ptr<TensorBase> operator+(const TensorBase& other) const = 0;
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> reshape(const std::vector<index_t>& new_shape) const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> slice(const std::vector<std::string>& range_strings) = 0;
@@ -64,7 +73,7 @@ public:
     [[nodiscard]] virtual index_t size() const;
     virtual void to_cpu() = 0;
     virtual void to_gpu() = 0;
-    virtual void print(std::ostream& os) const = 0;
+    void print(std::ostream& os) const override = 0;
     [[nodiscard]] virtual bool is_contiguous() const = 0;
 
     virtual void fill(ScalarType value) = 0;
@@ -77,79 +86,73 @@ public:
 
     [[nodiscard]] index_t num_elements() const;
     [[nodiscard]] virtual index_t n_bytes() const = 0;
-
-private:
-    friend std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
-        tensor.print(os);
-        return os;
-    }
 };
 
-    // 实现部分保持不变
-    template<typename scalar_t>
-    Tensor<scalar_t>::Tensor(Shape _shape, const Device _device)
-        : device(_device), shape(std::move(_shape)), strides_(this->get_shape().compute_strides()) {}
+// Implementation part remains unchanged
+template<typename scalar_t>
+Tensor<scalar_t>::Tensor(Shape _shape, const Device _device)
+    : device(_device), shape(std::move(_shape)), strides_(this->get_shape().compute_strides()) {}
 
-    template<typename scalar_t>
-    index_t Tensor<scalar_t>::size() const {
-        index_t store_size = 1;
-        const auto& dims = shape.dims();
-        const auto& strides = get_strides();
+template<typename scalar_t>
+index_t Tensor<scalar_t>::size() const {
+    index_t store_size = 1;
+    const auto& dims = shape.dims();
+    const auto& strides = get_strides();
 
-        for (index_t i = 0; i < dims.size(); ++i) {
-            if (strides[i] != 0) {
-                store_size *= dims[i];
-            }
+    for (index_t i = 0; i < dims.size(); ++i) {
+        if (strides[i] != 0) {
+            store_size *= dims[i];
         }
-        return store_size;
     }
+    return store_size;
+}
 
-    template<typename scalar_t>
-    const Shape& Tensor<scalar_t>::get_shape() const {
-        return shape;
-    }
+template<typename scalar_t>
+const Shape& Tensor<scalar_t>::get_shape() const {
+    return shape;
+}
 
-    template<typename scalar_t>
-    index_t Tensor<scalar_t>::get_offset() const {
-        return offset_;
-    }
+template<typename scalar_t>
+index_t Tensor<scalar_t>::get_offset() const {
+    return offset_;
+}
 
-    template<typename scalar_t>
-    Device Tensor<scalar_t>::get_device() const {
-        return device;
-    }
+template<typename scalar_t>
+Device Tensor<scalar_t>::get_device() const {
+    return device;
+}
 
-    template<typename scalar_t>
-    index_t Tensor<scalar_t>::num_elements() const {
-        return shape.total_size();
-    }
+template<typename scalar_t>
+index_t Tensor<scalar_t>::num_elements() const {
+    return shape.total_size();
+}
 
-    template<typename scalar_t>
-    bool Tensor<scalar_t>::is_contiguous_in_range(const index_t start_dim, index_t end_dim) const {
-        const std::vector<index_t>& shape = get_shape().dims();
-        const std::vector<index_t>& strides = get_strides();
+template<typename scalar_t>
+bool Tensor<scalar_t>::is_contiguous_in_range(const index_t start_dim, index_t end_dim) const {
+    const std::vector<index_t>& shape = get_shape().dims();
+    const std::vector<index_t>& strides = get_strides();
 
-        if (shape.empty() || (shape.size() == 1 && shape[0] == 0)) {
-            return true;
-        }
-
-        if (end_dim == -1) {
-            end_dim = shape.size() - 1;
-        }
-
-        if (start_dim > end_dim || end_dim >= shape.size()) {
-            throw std::invalid_argument("Invalid dimension range");
-        }
-        index_t expected_stride = 1;
-
-        for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
-            if (i <= end_dim && i >= start_dim && shape[i] != 1 && strides[i] != expected_stride) {
-                return false;
-            }
-            expected_stride *= shape[i];
-        }
+    if (shape.empty() || (shape.size() == 1 && shape[0] == 0)) {
         return true;
     }
+
+    if (end_dim == -1) {
+        end_dim = shape.size() - 1;
+    }
+
+    if (start_dim > end_dim || end_dim >= shape.size()) {
+        throw std::invalid_argument("Invalid dimension range");
+    }
+    index_t expected_stride = 1;
+
+    for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
+        if (i <= end_dim && i >= start_dim && shape[i] != 1 && strides[i] != expected_stride) {
+            return false;
+        }
+        expected_stride *= shape[i];
+    }
+    return true;
+}
 
 } // namespace Breeze
 

@@ -22,6 +22,95 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::sin(
+        const Tensor<ScalarT1> &a) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
+        iter.cpu_kernel_vec(
+            [](ResultT *out_ptr,ResultT a_value) {
+                *out_ptr = std::sin(a_value);
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                Vectorized<ResultT> out_vec = a_vec.sin();
+                out_vec.store(out_ptr);
+            }
+        );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::cos(
+        const Tensor<ScalarT1> &a) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
+        iter.cpu_kernel_vec(
+            [](ResultT *out_ptr,ResultT a_value) {
+                *out_ptr = std::cos(a_value);
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                Vectorized<ResultT> out_vec = a_vec.cos();
+                out_vec.store(out_ptr);
+            }
+        );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::tan(
+        const Tensor<ScalarT1> &a) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
+        iter.cpu_kernel_vec(
+            [](ResultT *out_ptr,ResultT a_value) {
+                *out_ptr = std::tan(a_value);
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                Vectorized<ResultT> out_vec = a_vec.tan();
+                out_vec.store(out_ptr);
+            }
+        );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::atan(
+        const Tensor<ScalarT1> &a) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
+        iter.cpu_kernel_vec(
+            [](ResultT *out_ptr,ResultT a_value) {
+                *out_ptr = std::atan(a_value);
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                Vectorized<ResultT> out_vec = a_vec.atan();
+                out_vec.store(out_ptr);
+            }
+        );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::pow(
+        const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::binary_op(*result, a, b);
+        iter.cpu_kernel_vec(
+           [](ResultT* out_ptr, const ResultT a_value, const ResultT b_value) {
+               *out_ptr = std::pow(a_value, b_value);
+           },
+           [](ResultT* out_ptr, const Vectorized<ResultT> a_vec, const Vectorized<ResultT> b_vec) {
+               Vectorized<ResultT> out_vec = a_vec.pow(b_vec);
+               out_vec.store(out_ptr);
+       });
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::add(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;

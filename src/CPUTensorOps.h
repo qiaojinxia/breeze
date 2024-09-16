@@ -30,7 +30,12 @@ namespace Breeze {
             static CPUTensorOps instance;
             return instance;
         }
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> sin(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> cos(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> tan(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> atan(const Tensor<ScalarT1>& a) const override;
 
+        [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> pow(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> add(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> subtract(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> divide(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;

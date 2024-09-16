@@ -24,8 +24,13 @@ namespace Breeze {
 
         // 矩阵乘法
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> matmul(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> sin(const Tensor<ScalarT1>& a) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> cos(const Tensor<ScalarT1>& a) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> tan(const Tensor<ScalarT1>& a) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> atan(const Tensor<ScalarT1>& a) const = 0;
 
         // wise操作
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> pow(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> add(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> subtract(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> divide(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
@@ -33,6 +38,8 @@ namespace Breeze {
 
         virtual ~TensorOps() = default;
     };
+
+
 }
 
 #endif //TENSOROPS_H

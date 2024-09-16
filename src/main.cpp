@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <thread>
 #include <sstream>
+
 using namespace Breeze;
 int main() {
     #pragma omp parallel

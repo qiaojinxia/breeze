@@ -120,7 +120,7 @@ namespace Breeze {
         }
 
         [[nodiscard]] index_t dim(const index_t axis) const {
-            if (axis >= dims_.size()) {
+            if (axis >= ndim()) {
                 throw std::out_of_range("Axis out of range");
             }
             return dims_[axis];
@@ -156,9 +156,9 @@ namespace Breeze {
 
         friend std::ostream& operator<<(std::ostream& os, const Shape& shape) {
             os << '(';
-            for (index_t i = 0; i < shape.dims_.size(); ++i) {
+            for (index_t i = 0; i < shape.ndim(); ++i) {
                 os << shape.dims_[i];
-                if (i != shape.dims_.size() - 1) {
+                if (i != shape.ndim() - 1) {
                     os << ", ";
                 }
             }

@@ -17,9 +17,9 @@ public:
     // 打印张量形状
     static void print_shape(const std::vector<index_t>& shape) {
         std::cout << "(";
-        for (index_t i = 0; i < shape.size(); ++i) {
+        for (index_t i = 0; i < static_cast<index_t>(shape.size()); ++i) {
             std::cout << shape[i];
-            if (i < shape.size() - 1) {
+            if (i <static_cast<index_t>( shape.size()) - 1) {
                 std::cout << ", ";
             }
         }
@@ -1335,21 +1335,25 @@ public:
 
     static void test_OP() {
         {
-            const Tensor<float> *a = new CPUTensor<float>({10, 10, 10},1);
-            const Tensor<float> *b = new CPUTensor<float>({10, 10, 10},4);
-            // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
-            // MEASURE_TIME(a - b);
+            const Tensor<float> *a = new CPUTensor<float>({1000, 1000, 1000},1);
+            // const Tensor<float> *b = new CPUTensor<float>({1000, 1000, 1000},4);
+            // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+            // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
+
 
 
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
-            // // MEASURE_TIME(a + b);
-            // std::cout << a << std::endl;
-            // const auto c = *b + *a;
-            // std::cout << *c << std::endl;
+            // MEASURE_TIME(a + b);
+            // std::cout << *a->cos() << std::endl;
+            // const auto c = b + a;
+            MEASURE_TIME(*a->sin());
+            // std::cout << *a->cos()->sin() << std::endl;
+
+
         }
 
         // {
