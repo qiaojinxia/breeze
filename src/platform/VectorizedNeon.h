@@ -61,9 +61,24 @@ namespace Breeze {
             return Vectorized(Sleef_atanf4_u10(values));
         }
 
+        [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {
+            const float32x4_t vec_two_pi = vdupq_n_f32(2.0f * M_PI);
+            const float32x4_t vec_minus_two = vdupq_n_f32(-2.0f);
+            const float32x4_t vec_log_u1 = Sleef_logf4_u10(v1.values);
+            const float32x4_t vec_sqrt = Sleef_sqrtf4_u05(vmulq_f32(vec_minus_two, vec_log_u1));
+            const float32x4_t vec_cos = Sleef_cosf4_u10(vmulq_f32(vec_two_pi, v2.values));
+            const float32x4_t vec_result = vmulq_f32(vec_sqrt, vec_cos);
+            return Vectorized(vec_result);
+        }
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(vld1q_f32(reinterpret_cast<const float*>(ptr)));
         }
+
+        static Vectorized loadu(const float* ptr) {
+            return Vectorized(vld1q_f32(ptr));
+        }
+
 
         void store(float* ptr) const {
             vst1q_f32(ptr, values);
@@ -119,8 +134,22 @@ namespace Breeze {
             return Vectorized(Sleef_atand2_u10(values));
         }
 
+        [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {
+            const float64x2_t vec_two_pi = vdupq_n_f64(2.0 * M_PI);
+            const float64x2_t vec_minus_two = vdupq_n_f64(-2.0);
+            const float64x2_t vec_log_u1 = Sleef_logd2_u10(v1.values);
+            const float64x2_t vec_sqrt = Sleef_sqrtd2_u05(vmulq_f64(vec_minus_two, vec_log_u1));
+            const float64x2_t vec_cos = Sleef_cosd2_u10(vmulq_f64(vec_two_pi, v2.values));
+            const float64x2_t vec_result = vmulq_f64(vec_sqrt, vec_cos);
+            return Vectorized(vec_result);
+        }
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(vld1q_f64(reinterpret_cast<const double*>(ptr)));
+        }
+
+        static Vectorized loadu(const double* ptr) {
+            return Vectorized(vld1q_f64(ptr));
         }
 
         void store(double* ptr) const {

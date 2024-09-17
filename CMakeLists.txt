@@ -95,7 +95,6 @@ set(SOURCES
         src/node.cpp
         src/CPUTensorOps.cpp
         src/CPUTensor.cpp
-        src/TensorIterator.cpp
 )
 
 # Define header files

@@ -343,7 +343,7 @@ namespace Breeze {
 
                 for (index_t j = i; j < end; ++j) {
                     for (size_t k = 0; k < data_ptrs.size(); ++k) {
-                        data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * result_tsize +
+                        data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * tsize +
                             compute_offset(counter, operands_[k].strides_bytes);
                     }
 

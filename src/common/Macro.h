@@ -6,6 +6,23 @@
 #define MACRO_H
 
 using index_t = int64_t;
+#define DEFINE_BINARY_OP(OP_NAME, METHOD_NAME)                                  \
+template<typename ScalarType>                                                  \
+std::shared_ptr<TensorBase> CPUTensor<ScalarType>::OP_NAME(const TensorBase& rhs) const { \
+    if (const auto* rhsFloat = dynamic_cast<const CPUTensor<float>*>(&rhs)) {   \
+        return CPUTensorOps<ScalarType, float>::getInstance().METHOD_NAME(*this, *rhsFloat); \
+    } else if (const auto* rhsDouble = dynamic_cast<const CPUTensor<double>*>(&rhs)) { \
+        return CPUTensorOps<ScalarType, double>::getInstance().METHOD_NAME(*this, *rhsDouble); \
+    } else {                                                                   \
+        throw std::runtime_error(#OP_NAME " between tensors of different scalar types is not supported."); \
+    }                                                                          \
+}
+
+#define DEFINE_UNARY_OP(OP_NAME) \
+    template<typename ScalarType> \
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::OP_NAME() const { \
+        return CPUTensorOps<ScalarType>::getInstance().OP_NAME(*this); \
+    }
 
 // 定义宏来测量代码段的运行时间
 #define MEASURE_TIME(code_to_measure) do { \

@@ -25,7 +25,7 @@ namespace Breeze {
     template <> struct TypeToScalarType<bool> { static constexpr auto value = ScalarType::Bool; };
 
     inline std::vector<index_t> calc_strides_bytes(const ScalarType scalar_t, const std::vector<index_t>& strides) {
-        size_t byte_size;
+        index_t byte_size;
         switch (scalar_t) {
             case ScalarType::Float:
                 byte_size = sizeof(float);
@@ -45,7 +45,7 @@ namespace Breeze {
         byte_strides.reserve(strides.size());
 
         for (const auto& stride : strides) {
-            byte_strides.push_back(static_cast<size_t>(stride) * byte_size);
+            byte_strides.push_back(stride * byte_size);
         }
 
         return byte_strides;

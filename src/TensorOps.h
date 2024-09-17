@@ -21,7 +21,7 @@ namespace Breeze {
         using scalar_ResultTypeype = typename BinaryOpResultType<ScalarT1, effective_ScalarT2>::type;
 
         virtual void fill(Tensor<ScalarT1>& a, ScalarT1 value) const = 0;
-
+        virtual void randn(Tensor<ScalarT1>& a) const = 0;
         // 矩阵乘法
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> matmul(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> sin(const Tensor<ScalarT1>& a) const = 0;

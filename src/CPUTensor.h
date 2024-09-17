@@ -33,6 +33,9 @@ namespace Breeze {
 
         [[nodiscard]] std::shared_ptr<TensorBase> pow(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const override;
 
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> reshape(const std::vector<index_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> slice(const std::vector<std::string>& range_strings) override;
@@ -50,7 +53,6 @@ namespace Breeze {
         static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<ScalarType>*>& tensors, index_t dim);
         static std::shared_ptr<CPUTensor> stack(const std::vector<Tensor<ScalarType>*>& tensors, index_t dim);
         static std::shared_ptr<CPUTensor> randn(std::vector<index_t> shape);
-        static std::shared_ptr<CPUTensor> randn(std::vector<index_t>& shape, std::default_random_engine& generator);
 
         ScalarType* mutable_data() override;
         [[nodiscard]] const ScalarType* data() const override;
@@ -60,7 +62,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> clone() const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> contiguous() override;
 
-        [[nodiscard]] const ScalarType& at(const std::vector<index_t>& indices) const override;
+        [[nodiscard]] const ScalarType& at(const std::vector<size_t>& indices) const override;
         void set_value(const std::vector<index_t>& indices, ScalarType value) override;
 
         void to_cpu() override;

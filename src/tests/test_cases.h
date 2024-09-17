@@ -475,7 +475,7 @@ public:
                 6.0f, 7.0f, 8.0f,
                 9.0f, 10.0f, 11.0f
             };
-            for (index_t i = 0; i < expected_dim0.size(); ++i) {
+            for (size_t i = 0; i < expected_dim0.size(); ++i) {
                 assert(std::abs(cat_dim0->mutable_data()[i] - expected_dim0[i]) < 1e-6f);
             }
 
@@ -486,7 +486,7 @@ public:
                 0.0f, 1.0f, 2.0f, 6.0f, 7.0f, 8.0f,
                 3.0f, 4.0f, 5.0f, 9.0f, 10.0f, 11.0f
             };
-            for (index_t i = 0; i < expected_dim1.size(); ++i) {
+            for (size_t i = 0; i < expected_dim1.size(); ++i) {
                 assert(std::abs(cat_dim1->mutable_data()[i] - expected_dim1[i]) < 1e-6f);
             }
 
@@ -502,7 +502,7 @@ public:
                 1.0f, 4.0f, 7.0f, 10.0f,
                 2.0f, 5.0f, 8.0f, 11.0f
             };
-            for (index_t i = 0; i < expected_non_contiguous.size(); ++i) {
+            for (size_t i = 0; i < expected_non_contiguous.size(); ++i) {
                 assert(std::abs(cat_non_contiguous->mutable_data()[i] - expected_non_contiguous[i]) < 1e-6f);
             }
         }
@@ -859,10 +859,10 @@ public:
           assert(t2->get_shape().dims() == std::vector<index_t>({2, 3, 4}));
 
           // 验证扩展后的数据
-          for (index_t i = 0; i < 2; ++i) {
-              for (index_t j = 0; j < 3; ++j) {
+          for (size_t i = 0; i < 2; ++i) {
+              for (size_t j = 0; j < 3; ++j) {
                   float expected_value = i * 3 + j;
-                  for (index_t k = 0; k < 4; ++k) {
+                  for (size_t k = 0; k < 4; ++k) {
                       assert(t2->at({i,j,k}) == expected_value);
                   }
               }
@@ -876,9 +876,9 @@ public:
           assert(t3->get_shape().dims() == std::vector<index_t>({4, 3, 2}));
 
           // 验证 permute 后的数据
-          for (index_t i = 0; i < 4; ++i) {
-              for (index_t j = 0; j < 3; ++j) {
-                  for (index_t k = 0; k < 2; ++k) {
+          for (size_t i = 0; i < 4; ++i) {
+              for (size_t j = 0; j < 3; ++j) {
+                  for (size_t k = 0; k < 2; ++k) {
                       float expected_value = k * 3 + j;
                       assert(t3->at({i,j,k}) == expected_value);
                   }
@@ -1176,7 +1176,7 @@ public:
             for (int i = 0; i < 3; ++i) {
                 auto tensor = std::make_shared<CPUTensor<float>>(shape);
                 // 用随机数填充张量
-                for (index_t j = 0; j < tensor->size(); ++j) {
+                for (size_t j = 0; j < tensor->size(); ++j) {
                     tensor->mutable_data()[j] = static_cast<float>(dis(gen));
                 }
                 input_tensors.push_back(tensor);
@@ -1335,22 +1335,23 @@ public:
 
     static void test_OP() {
         {
-            const Tensor<float> *a = new CPUTensor<float>({1000, 1000, 1000},1);
+            // const Tensor<float> *a = new CPUTensor<float>({1000, 1000, 1000},1);
             // const Tensor<float> *b = new CPUTensor<float>({1000, 1000, 1000},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
 
-
+            auto a = CPUTensor<float>::randn({10,2});
+            std::cout << *a << std::endl;
 
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
-            // MEASURE_TIME(a + b);
+            // MEASURE_TIME(*a + *b);
             // std::cout << *a->cos() << std::endl;
             // const auto c = b + a;
-            MEASURE_TIME(*a->sin());
+            // MEASURE_TIME(*a->sin());
             // std::cout << *a->cos()->sin() << std::endl;
 
 
@@ -1488,10 +1489,10 @@ public:
         // test_slice();
         // test_repeat();
         // test_stack();
-        // // test_randn();
+        // test_randn();
         // test_flatten();
         // test_permute();
-        // // test_omp();
+        // test_omp();
         // test_cat();
         // test_unsqueeze();
         // test_squeeze();

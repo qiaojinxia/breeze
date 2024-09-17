@@ -23,6 +23,12 @@ public:
     [[nodiscard]] virtual std::shared_ptr<TensorBase> atan() const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> pow(const TensorBase& other) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& other) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& other) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& other) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& other) const = 0;
+
+
+
 private:
     friend std::ostream& operator<<(std::ostream& os, const TensorBase& tensor) {
         tensor.print(os);
@@ -67,7 +73,7 @@ public:
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> contiguous() = 0;
-    [[nodiscard]] virtual const ScalarType& at(const std::vector<index_t>& indices) const = 0;
+    [[nodiscard]] virtual const ScalarType& at(const std::vector<size_t>& indices) const = 0;
     virtual void set_value(const std::vector<index_t>& indices, ScalarType value) = 0;
 
     [[nodiscard]] virtual index_t size() const;
@@ -99,7 +105,7 @@ index_t Tensor<scalar_t>::size() const {
     const auto& dims = shape.dims();
     const auto& strides = get_strides();
 
-    for (index_t i = 0; i < dims.size(); ++i) {
+    for (size_t i = 0; i < dims.size(); ++i) {
         if (strides[i] != 0) {
             store_size *= dims[i];
         }

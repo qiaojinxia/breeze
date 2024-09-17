@@ -20,6 +20,7 @@ namespace Breeze {
         using scalar_result = typename BaseOps::scalar_ResultTypeype;
 
         void fill(Tensor<ScalarT1>& a, ScalarT1 value) const override;
+        void randn(Tensor<ScalarT1>& a) const override;
 
         // 删除拷贝构造函数和赋值操作符
         CPUTensorOps(const CPUTensorOps&) = delete;

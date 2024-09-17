@@ -3,6 +3,7 @@
 #include "TensorIterator.h"
 #include "platform/SIMDFactory.h"
 #include "CPUTensor.h"
+#include "./lib/pcg/pcg_random.hpp"
 
 namespace Breeze {
 
@@ -16,6 +17,40 @@ namespace Breeze {
             },
             [value](ScalarT1 *out_ptr) {
                 auto out_vec = Vectorized<ScalarT1>(value);
+                out_vec.store(out_ptr);
+            }
+        );
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::randn(Tensor<ScalarT1> &a) const {
+        using ScalarT1 = typename BaseOps::ScalarT1;
+        auto iter = TensorIterator<ScalarT1>::nullary_op(a);
+        pcg_extras::seed_seq_from<std::random_device> seed_source;
+        // 创建 PCG 随机数生成器
+        pcg32 rng(seed_source);
+        std::normal_distribution<ScalarT1> dist(0.0, 1.0);
+
+        // 创建 Box-Muller 变换所需的均匀分布
+        std::uniform_real_distribution<ScalarT1> uniform(0.0, 1.0);
+        iter.cpu_kernel_vec(
+            [&dist,&rng](ScalarT1 *out_ptr) {
+                *out_ptr = dist(rng);
+            },
+            [&uniform,&rng](ScalarT1 *out_ptr) {
+                // SIMD 版本：使用 Box-Muller 变换
+               constexpr int vec_size = Vectorized<ScalarT1>::size();
+               alignas(32) std::array<ScalarT1, vec_size> u1{};
+               alignas(32) std::array<ScalarT1, vec_size> u2{};
+
+               // 生成均匀分布的随机数
+               for (int i = 0; i < vec_size; ++i) {
+                   u1[i] = uniform(rng);
+                   u2[i] = uniform(rng);
+               }
+                auto vec_1 = Vectorized<ScalarT1>::loadu(reinterpret_cast<char *>(&u1[0]));
+                auto vec_2 = Vectorized<ScalarT1>::loadu(reinterpret_cast<char *>(&u2[0]));
+                auto out_vec = Vectorized<ScalarT1>::randn(vec_1, vec_2);
                 out_vec.store(out_ptr);
             }
         );
