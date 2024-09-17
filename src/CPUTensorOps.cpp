@@ -48,8 +48,8 @@ namespace Breeze {
                    u1[i] = uniform(rng);
                    u2[i] = uniform(rng);
                }
-                auto vec_1 = Vectorized<ScalarT1>::loadu(reinterpret_cast<char *>(&u1[0]));
-                auto vec_2 = Vectorized<ScalarT1>::loadu(reinterpret_cast<char *>(&u2[0]));
+                auto vec_1 = Vectorized<ScalarT1>::loadu(reinterpret_cast<ScalarT1 *>(&u1[0]));
+                auto vec_2 = Vectorized<ScalarT1>::loadu(reinterpret_cast<ScalarT1 *>(&u2[0]));
                 auto out_vec = Vectorized<ScalarT1>::randn(vec_1, vec_2);
                 out_vec.store(out_ptr);
             }
