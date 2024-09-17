@@ -13,6 +13,12 @@ enum class Device {
     GPU
 };
 
+class ScalarBase {
+    public:
+        virtual ~ScalarBase() = default;
+        virtual void print(std::ostream& os) const = 0;
+};
+
 class TensorBase {
 public:
     virtual ~TensorBase() = default;
@@ -22,12 +28,10 @@ public:
     [[nodiscard]] virtual std::shared_ptr<TensorBase> tan() const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> atan() const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> pow(const TensorBase& other) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& other) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& other) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& other) const = 0;
-    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& other) const = 0;
-
-
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const = 0;
 
 private:
     friend std::ostream& operator<<(std::ostream& os, const TensorBase& tensor) {
@@ -48,6 +52,7 @@ protected:
 public:
     Tensor(Shape _shape, Device _device);
     ~Tensor() override = default;
+
 
     // Pure virtual methods
     virtual ScalarType operator[](const std::string& index) const = 0;

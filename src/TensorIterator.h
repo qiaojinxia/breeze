@@ -39,6 +39,10 @@ namespace Breeze {
     template<typename... ScalarTypes>
     class TensorIterator {
     public:
+        using OutputScalarType = LastScalarType<ScalarTypes...>;
+        //输出类型 的大小
+        static constexpr size_t ResultTypeSize = sizeof(OutputScalarType);
+
         struct OperandInfo {
             char* data{};
             std::vector<index_t> strides ={};
@@ -106,8 +110,6 @@ namespace Breeze {
         // 修改 add_output 方法，确保输出在最后一个模板参数位置
         template<size_t I = sizeof...(ScalarTypes) - 1, typename ScalarType>
         void add_output(Tensor<ScalarType>& t) {
-            using OutputType = typename last_type<ScalarTypes...>::type;
-            result_tsize = sizeof(OutputType);
             std::get<I>(tensors_) = static_cast<Tensor<ScalarType>*>(&t);
         }
 
@@ -118,10 +120,9 @@ namespace Breeze {
             std::get<I>(tensors_) = const_cast<Tensor<ScalarType>*>(&t);
         }
 
-
         template <std::size_t I>
         void expand_strides_for_operand() {
-                operands_[I].strides = expand_strides(get_shape_from_tuple<I>(), operands_[I].strides, shape_);
+            operands_[I].strides = expand_strides(get_shape_from_tuple<I>(), operands_[I].strides, shape_);
         }
 
         template <std::size_t I>
@@ -143,8 +144,7 @@ namespace Breeze {
                 get_tensor<sizeof...(ScalarTypes) - 1>().set_initial_shape(new_shape);
             }
 
-            using OutPutType = LastScalarType<ScalarTypes...>;
-            operands_.emplace_back(static_cast<OutPutType*>(get_tensor<sizeof...(ScalarTypes) - 1>().mutable_data()),
+            operands_.emplace_back(static_cast<OutputScalarType*>(get_tensor<sizeof...(ScalarTypes) - 1>().mutable_data()),
                 get_tensor<sizeof...(ScalarTypes) - 1>().get_strides(), get_tensor<sizeof...(ScalarTypes) - 1>().get_offset(), true, true);
             operands_[sizeof ...(ScalarTypes)-1].strides_bytes =
                 calc_strides_bytes(operands_[sizeof ...(ScalarTypes)-1].ScalarType, operands_[sizeof ...(ScalarTypes)-1].strides);
@@ -188,7 +188,7 @@ namespace Breeze {
             } else if (is_inner_contiguous_) {
                 inner_contiguous_kernel_vec(scalar_op, vector_op);
             } else {
-                strided_kernel_vec(scalar_op, vector_op);
+                strided_kernel_vec(scalar_op);
             }
         }
 
@@ -199,8 +199,6 @@ namespace Breeze {
         bool is_contiguous_{};
         bool is_inner_contiguous_{};
         size_t common_dim_{};
-        size_t result_tsize{};
-
 
         template<size_t I>
         auto& get_tensor() {
@@ -238,7 +236,7 @@ namespace Breeze {
                 index_to_counter(i, counter);
                 for (index_t j = i; j < end; ++j) {
                     for (size_t op = 0; op < operands_.size(); ++op) {
-                        data_ptrs[op] = operands_[op].data + result_tsize * operands_[op].begin_offset +
+                        data_ptrs[op] = operands_[op].data + ResultTypeSize * operands_[op].begin_offset +
                             compute_offset(counter, operands_[op].strides_bytes);
                         data_strides[op] = 1;
                     }
@@ -265,7 +263,7 @@ namespace Breeze {
                     index_to_counter(i, counter);
                     for (index_t j = i; j < end; ++j) {
                         for (size_t op = 0; op < operands_.size(); ++op) {
-                            data_ptrs[op] =  operands_[op].data + operands_[op].begin_offset * result_tsize +
+                            data_ptrs[op] =  operands_[op].data + operands_[op].begin_offset * ResultTypeSize +
                                 compute_offset(counter, operands_[op].strides_bytes);
                             data_strides[op] = operands_[op].strides.back();
                         }
@@ -280,19 +278,18 @@ namespace Breeze {
         void contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
             std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
-            const auto tsize = result_tsize;
             for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
-                data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * tsize;
+                data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize;
             }
             constexpr index_t grain_size = GRAIN_SIZE;
             #pragma omp parallel for default(none) \
-            shared(numel, scalar_op, vector_op, operands_, data_ptrs, tsize, grain_size) \
+            shared(numel, scalar_op, vector_op, operands_, data_ptrs, grain_size) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < numel; i += grain_size) {
                 const index_t end = std::min(i + GRAIN_SIZE, numel);
                 std::array<char*, sizeof...(ScalarTypes)> local_ptrs = data_ptrs;
                 for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
-                    local_ptrs[j] += i * tsize;
+                    local_ptrs[j] += i * ResultTypeSize;
                 }
                 char* output_ptr = local_ptrs[sizeof...(ScalarTypes) - 1];
                 op_loop(scalar_op, vector_op, local_ptrs, output_ptr, end - i);
@@ -303,12 +300,10 @@ namespace Breeze {
         void inner_contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
             const index_t inner_dim = shape_.back();
             const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
-            const auto tsize = result_tsize;
-
             std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
 
             #pragma omp parallel for default(none) \
-            shared(outer_dim, scalar_op, vector_op, shape_, inner_dim, operands_, tsize) \
+            shared(outer_dim, scalar_op, vector_op, shape_, inner_dim, operands_) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < outer_dim; ++i) {
                 std::array<char*, sizeof...(ScalarTypes)> local_ptrs;
@@ -316,7 +311,7 @@ namespace Breeze {
                 index_to_counter(i, counter);
 
                 for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
-                    local_ptrs[j] = operands_[j].data + operands_[j].begin_offset * tsize +
+                    local_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize +
                         compute_offset(counter, operands_[j].strides_bytes);
                 }
 
@@ -325,16 +320,15 @@ namespace Breeze {
             }
         }
 
-        template<typename ScalarOp, typename VectorOp>
-        void strided_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
+        template<typename ScalarOp>
+        void strided_kernel_vec(ScalarOp& scalar_op) {
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
             constexpr index_t grain_size = GRAIN_SIZE;
             std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
             constexpr size_t num_operands = sizeof...(ScalarTypes) - 1;
-            const auto tsize = result_tsize;
 
             #pragma omp parallel for default(none) \
-            shared(numel, scalar_op, vector_op, operands_, data_ptrs, tsize, grain_size, num_operands) \
+            shared(numel, scalar_op, operands_, data_ptrs, grain_size, num_operands) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < numel; i += grain_size) {
                 std::vector<index_t> counter(shape_.size(), 0);
@@ -343,7 +337,7 @@ namespace Breeze {
 
                 for (index_t j = i; j < end; ++j) {
                     for (size_t k = 0; k < data_ptrs.size(); ++k) {
-                        data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * tsize +
+                        data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * ResultTypeSize +
                             compute_offset(counter, operands_[k].strides_bytes);
                     }
 
@@ -390,7 +384,7 @@ namespace Breeze {
         template<typename ScalarOp, typename VectorOp>
         void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,
             const std::array<char*, sizeof...(ScalarTypes)> &data_ptrs, char* output_ptr, const index_t size) {
-            using LastVectorized = Vectorized<LastScalarType<ScalarTypes...>>;
+            using LastVectorized = Vectorized<OutputScalarType>;
             constexpr size_t simd_vector_size = LastVectorized::size();
             vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
             scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
@@ -429,10 +423,8 @@ namespace Breeze {
             if (output_shape.empty()) {
                 return strides;
             }
-
             std::vector<index_t> result(output_shape.size(), 0);
             const index_t offset = static_cast<index_t>(output_shape.size()) - static_cast<index_t>(input_shape.size());
-
             for (index_t i = 0; i < static_cast<index_t>(input_shape.size()); ++i) {
                 if (i < strides.size()) {
                     if (input_shape[i] == output_shape[i + offset]) {

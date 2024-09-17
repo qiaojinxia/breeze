@@ -30,14 +30,13 @@ namespace Breeze {
         // 创建 PCG 随机数生成器
         pcg32 rng(seed_source);
         std::normal_distribution<ScalarT1> dist(0.0, 1.0);
-
         // 创建 Box-Muller 变换所需的均匀分布
         std::uniform_real_distribution<ScalarT1> uniform(0.0, 1.0);
         iter.cpu_kernel_vec(
-            [&dist,&rng](ScalarT1 *out_ptr) {
+            [&dist, &rng](ScalarT1 *out_ptr) {
                 *out_ptr = dist(rng);
             },
-            [&uniform,&rng](ScalarT1 *out_ptr) {
+            [&uniform, &rng](ScalarT1 *out_ptr) {
                 // SIMD 版本：使用 Box-Muller 变换
                constexpr int vec_size = Vectorized<ScalarT1>::size();
                alignas(32) std::array<ScalarT1, vec_size> u1{};

@@ -103,6 +103,8 @@ namespace Breeze {
     DEFINE_BINARY_OP(operator/, divide)
 
 
+
+
     template<typename ScalarType>
     std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::randn(std::vector<index_t> shape) {
         // 创建一个新的 CPUTensor

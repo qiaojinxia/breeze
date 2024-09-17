@@ -37,6 +37,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const override;
 
+
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> reshape(const std::vector<index_t>& new_shape) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> slice(const std::vector<std::string>& range_strings) override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> view(const std::vector<index_t>& new_shape) const override;
