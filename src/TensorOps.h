@@ -38,6 +38,12 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> divide(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> multiply(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
 
+        virtual void add_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
+        virtual void subtract_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
+        virtual void multiply_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
+        virtual void divide_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
+
+
         virtual ~TensorOps() = default;
     };
 

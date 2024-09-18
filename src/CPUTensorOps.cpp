@@ -50,7 +50,7 @@ namespace Breeze {
                 auto start_vec = Vectorized<ScalarT1>(start);
                 auto offset_vec = Vectorized<ScalarT1>(offset_index);
                 auto step_vec = Vectorized<ScalarT1>(step);
-                Vectorized<ScalarT1> out_vec = (inc_indices_vec + offset_vec + start_vec) * step_vec;
+                Vectorized<ScalarT1> out_vec = start_vec + (inc_indices_vec + offset_vec ) * step_vec;
                 out_vec.store(out_ptr);
             }
         );
@@ -249,7 +249,150 @@ namespace Breeze {
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::matmul(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
-        return nullptr;
+         // Get shapes of tensors a and b
+        const std::vector<index_t> a_shape = a.get_shape().dims();
+        const std::vector<index_t> b_shape = b.get_shape().dims();
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+
+        // Check for correct dimensions
+        if (a_shape.size() < 2 || b_shape.size() < 2) {
+            throw std::invalid_argument("Input tensors must have at least two dimensions for matrix multiplication.");
+        }
+
+        // Check if inner dimensions match
+        if (a_shape[a_shape.size() - 1] != b_shape[b_shape.size() - 2]) {
+            throw std::invalid_argument("The inner dimensions must match for matrix multiplication.");
+        }
+
+        // Calculate the broadcast shape
+        auto [a_strides, b_strides, result_shape] =
+            Utils::calc_broadcast_shape(a_shape, b_shape, true);
+
+        // Allocate result tensor
+        auto result = std::make_shared<CPUTensor<ResultT>>(Shape{result_shape});
+
+        // Compute the strides for each tensor
+        const std::vector<index_t> result_strides = result->get_strides();
+
+        const index_t depth = static_cast<index_t>(result_shape.size()) - 2;
+        const index_t m = a_shape[a_shape.size() - 2];
+        const index_t k = a_shape[a_shape.size() - 1];
+        const index_t n = b_shape[b_shape.size() - 1];
+
+        CBLAS_ORDER order = CblasRowMajor;
+        CBLAS_TRANSPOSE transA = CblasNoTrans;
+        CBLAS_TRANSPOSE transB = CblasNoTrans;
+        ResultT alpha = static_cast<ResultT>(1.0);
+        ResultT beta = static_cast<ResultT>(0.0);
+
+        // Calculate the number of 2D matrices
+        index_t num_matrices = 1;
+        for (index_t i = 0; i < depth; ++i) {
+            num_matrices *= result_shape[i];
+        }
+
+        const ScalarT1* a_data = a.data();
+        const ScalarT2* b_data = b.data();
+        ResultT* result_data = result->mutable_data();
+
+        for (index_t idx = 0; idx < num_matrices; ++idx) {
+            std::vector<index_t> coords(depth);
+            index_t temp = idx;
+            for (index_t i = static_cast<int>(depth) - 1; i >= 0; --i) {
+                coords[i] = temp % result_shape[i];
+                temp /= result_shape[i];
+            }
+
+            index_t a_offset = a.get_offset(), b_offset = b.get_offset(), result_offset = 0;
+            for (index_t i = 0; i < depth; ++i) {
+                a_offset += (coords[i] % a_shape[i]) * a_strides[i];
+                b_offset += (coords[i] % b_shape[i]) * b_strides[i];
+                result_offset += coords[i] * result_strides[i];
+            }
+
+            const ScalarT1* a_sub = a_data + a_offset;
+            const ScalarT2* b_sub = b_data + b_offset;
+            ResultT* result_sub = result_data + result_offset;
+
+            // Use BLAS for matrix multiplication
+            if constexpr (std::is_same_v<ResultT, float>) {
+                cblas_sgemm(order, transA, transB, m, n, k, alpha, a_sub, k, b_sub, n, beta, result_sub, n);
+            } else if constexpr (std::is_same_v<ResultT, double>) {
+                // cblas_dgemm(order, transA, transB, m, n, k, alpha, a_sub, k, b_sub, n, beta, result_sub, n);
+            } else {
+                // Fallback scalar implementation
+                for (index_t i = 0; i < m; ++i) {
+                    for (index_t j = 0; j < n; ++j) {
+                        ResultT sum = 0;
+                        for (index_t l = 0; l < k; ++l) {
+                            sum += a_sub[i * k + l] * b_sub[l * n + j];
+                        }
+                        result_sub[i * n + j] = sum;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::add_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        iter.cpu_kernel_vec(
+            [](ScalarT1 *out_ptr, ScalarT1 a_value) {
+                *out_ptr = *out_ptr + a_value;
+            },
+            [](ScalarT1* out_ptr, const Vectorized<ScalarT1> b_vec) {
+                auto a_vec = Vectorized<ScalarT1>::loadu(out_ptr);
+                Vectorized<ScalarT1> out_vec = a_vec + b_vec;
+                out_vec.store(out_ptr);
+            }
+        );
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::subtract_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        iter.cpu_kernel_vec(
+            [](ScalarT1 *out_ptr, ScalarT1 a_value) {
+                *out_ptr = *out_ptr - a_value;
+            },
+            [](ScalarT1* out_ptr, const Vectorized<ScalarT1> b_vec) {
+                auto a_vec = Vectorized<ScalarT1>::loadu(out_ptr);
+                Vectorized<ScalarT1> out_vec = a_vec - b_vec;
+                out_vec.store(out_ptr);
+            }
+        );
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::multiply_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        iter.cpu_kernel_vec(
+            [](ScalarT1 *out_ptr,ScalarT1 a_value) {
+                *out_ptr = *out_ptr * a_value;
+            },
+            [](ScalarT1* out_ptr, const Vectorized<ScalarT1> b_vec) {
+                auto a_vec = Vectorized<ScalarT1>::loadu(out_ptr);
+                Vectorized<ScalarT1> out_vec = a_vec * b_vec;
+                out_vec.store(out_ptr);
+            }
+        );
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::divide_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        iter.cpu_kernel_vec(
+            [](ScalarT1 *out_ptr, ScalarT1 a_value) {
+                *out_ptr = *out_ptr / a_value;
+            },
+            [](ScalarT1* out_ptr, const Vectorized<ScalarT1> b_vec) {
+                auto a_vec = Vectorized<ScalarT1>::loadu(out_ptr);
+                Vectorized<ScalarT1> out_vec = a_vec / b_vec;
+                out_vec.store(out_ptr);
+            }
+        );
     }
 
     template class CPUTensorOps<float>;

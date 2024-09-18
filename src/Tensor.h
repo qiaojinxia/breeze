@@ -32,6 +32,10 @@ public:
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const = 0;
+    virtual void operator+=(const TensorBase& rhs) = 0;
+    virtual void operator-=(const TensorBase& rhs) = 0;
+    virtual void operator*=(const TensorBase& rhs) = 0;
+    virtual void operator/=(const TensorBase& rhs) = 0;
 
 private:
     friend std::ostream& operator<<(std::ostream& os, const TensorBase& tensor) {

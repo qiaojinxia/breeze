@@ -44,6 +44,12 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> multiply(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> matmul(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
 
+        void add_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
+        void subtract_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
+        void multiply_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
+        void divide_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
+
+
     private:
         // 私有构造函数
         CPUTensorOps() = default;

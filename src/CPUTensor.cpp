@@ -102,6 +102,10 @@ namespace Breeze {
     DEFINE_BINARY_OP(operator-, subtract)
     DEFINE_BINARY_OP(operator*, multiply)
     DEFINE_BINARY_OP(operator/, divide)
+    DEFINE_BINARY_OP_VOID(operator+=, add_inplace)
+    DEFINE_BINARY_OP_VOID(operator-=, subtract_inplace)
+    DEFINE_BINARY_OP_VOID(operator*=, multiply_inplace)
+    DEFINE_BINARY_OP_VOID(operator/=, divide_inplace)
 
     template<typename ScalarType>
     std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::randn(std::vector<index_t> shape) {
