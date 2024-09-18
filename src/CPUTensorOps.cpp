@@ -282,8 +282,8 @@ namespace Breeze {
         CBLAS_ORDER order = CblasRowMajor;
         CBLAS_TRANSPOSE transA = CblasNoTrans;
         CBLAS_TRANSPOSE transB = CblasNoTrans;
-        ResultT alpha = static_cast<ResultT>(1.0);
-        ResultT beta = static_cast<ResultT>(0.0);
+        auto alpha = static_cast<ResultT>(1.0);
+        auto beta = static_cast<ResultT>(0.0);
 
         // Calculate the number of 2D matrices
         index_t num_matrices = 1;
