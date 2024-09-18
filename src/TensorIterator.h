@@ -163,7 +163,7 @@ namespace Breeze {
 
             is_inner_contiguous_ = true;
             for (const auto& op : operands_) {
-                if (op.strides.back() != 1) {
+                if (!op.strides.empty() && op.strides.back() != 1) {
                     is_inner_contiguous_ = false;
                     break;
                 }
@@ -301,18 +301,20 @@ namespace Breeze {
             const index_t inner_dim = shape_.back();
             const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
             std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
+            for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
+                data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize;
+            }
 
             #pragma omp parallel for default(none) \
-            shared(outer_dim, scalar_op, vector_op, shape_, inner_dim, operands_) \
+            shared(outer_dim, scalar_op, vector_op, data_ptrs, shape_, inner_dim, operands_) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < outer_dim; ++i) {
-                std::array<char*, sizeof...(ScalarTypes)> local_ptrs;
+                std::array<char*, sizeof...(ScalarTypes)> local_ptrs = data_ptrs;
                 std::vector<index_t> counter(shape_.size() - 1, 0);
                 index_to_counter(i, counter);
 
                 for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
-                    local_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize +
-                        compute_offset(counter, operands_[j].strides_bytes);
+                    local_ptrs[j] +=compute_offset(counter, operands_[j].strides_bytes);
                 }
 
                 char* output_ptr = local_ptrs[sizeof...(ScalarTypes) - 1];
@@ -424,8 +426,8 @@ namespace Breeze {
                 return strides;
             }
             std::vector<index_t> result(output_shape.size(), 0);
-            const index_t offset = static_cast<index_t>(output_shape.size()) - static_cast<index_t>(input_shape.size());
-            for (index_t i = 0; i < static_cast<index_t>(input_shape.size()); ++i) {
+            const size_t offset = output_shape.size() - input_shape.size();
+            for (size_t i = 0; i < input_shape.size(); ++i) {
                 if (i < strides.size()) {
                     if (input_shape[i] == output_shape[i + offset]) {
                         result[i + offset] = strides[i];
@@ -438,9 +440,8 @@ namespace Breeze {
                     result[i + offset] = (input_shape[i] == output_shape[i + offset]) ? 1 : 0;
                 }
             }
-
             // 处理前面的维度（可能是因为广播而新增的维度）
-            for (index_t i = 0; i < offset; ++i) {
+            for (size_t i = 0; i < offset; ++i) {
                 result[i] = 0;  // 新增的维度的stride为0
             }
 

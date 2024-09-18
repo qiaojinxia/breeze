@@ -279,7 +279,6 @@ public:
                 {2.,  6., 10., 14., 18., 22. },
                 { 3.,  7., 11., 15., 19., 23. }
             };
-            auto x = squeezed->contiguous()->data();
             COMPARE_TENSOR_DATA(squeezed->contiguous()->data(), expected, 1e-6);
         }
 
@@ -568,6 +567,7 @@ public:
             std::vector<Tensor<float>*> tensors;  // 空向量
             CPUTensor<float>::cat(tensors, 0);
         }, std::invalid_argument);
+
 
         // 标量拼接测试（应报错）
         ASSERT_THROWS({
@@ -859,10 +859,10 @@ public:
           assert(t2->get_shape().dims() == std::vector<index_t>({2, 3, 4}));
 
           // 验证扩展后的数据
-          for (size_t i = 0; i < 2; ++i) {
-              for (size_t j = 0; j < 3; ++j) {
+          for (index_t i = 0; i < 2; ++i) {
+              for (index_t j = 0; j < 3; ++j) {
                   float expected_value = i * 3 + j;
-                  for (size_t k = 0; k < 4; ++k) {
+                  for (index_t k = 0; k < 4; ++k) {
                       assert(t2->at({i,j,k}) == expected_value);
                   }
               }
@@ -876,9 +876,9 @@ public:
           assert(t3->get_shape().dims() == std::vector<index_t>({4, 3, 2}));
 
           // 验证 permute 后的数据
-          for (size_t i = 0; i < 4; ++i) {
-              for (size_t j = 0; j < 3; ++j) {
-                  for (size_t k = 0; k < 2; ++k) {
+          for (index_t i = 0; i < 4; ++i) {
+              for (index_t j = 0; j < 3; ++j) {
+                  for (index_t k = 0; k < 2; ++k) {
                       float expected_value = k * 3 + j;
                       assert(t3->at({i,j,k}) == expected_value);
                   }
@@ -1071,10 +1071,13 @@ public:
             const auto t1 = CPUTensor<float>::arange(0, 6, 1.0)->view({2, 3});
             const auto t2 = CPUTensor<float>::arange(6, 12, 1.0)->view({2, 3});
             const auto t3 = CPUTensor<float>::arange(12, 18, 1.0)->view({2, 3});
-
+            std::cout << *t1 << std::endl;
+            std::cout << *t1 << std::endl;
+            std::cout << *t1 << std::endl;
             // 在第 0 维 stack
             const auto stacked0 = CPUTensor<float>::stack({t1.get(), t2.get(), t3.get()}, 0);
             assert(stacked0->get_shape().dims() == std::vector<index_t>({3, 2, 3}));
+            std::cout << *stacked0 << std::endl;
             assert(stacked0->mutable_data()[0] == 0.0f && stacked0->mutable_data()[6] == 6.0f && stacked0->mutable_data()[12] == 12.0f);
 
             // 在第 1 维 stack
@@ -1176,7 +1179,7 @@ public:
             for (int i = 0; i < 3; ++i) {
                 auto tensor = std::make_shared<CPUTensor<float>>(shape);
                 // 用随机数填充张量
-                for (size_t j = 0; j < tensor->size(); ++j) {
+                for (index_t j = 0; j < tensor->size(); ++j) {
                     tensor->mutable_data()[j] = static_cast<float>(dis(gen));
                 }
                 input_tensors.push_back(tensor);
@@ -1340,11 +1343,11 @@ public:
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
-
-            const auto a = CPUTensor<float>::randn({1000, 1000, 1000});
-            const auto b = CPUTensor<float>::randn({1000, 1000, 1000});
+            //
+            // const auto a = CPUTensor<float>::randn({1000, 1000, 1000});
+            // const auto b = CPUTensor<float>::randn({1000, 1000, 1000});
             // std::cout << *a << std::endl;
-            MEASURE_TIME(*a + *b);
+            // MEASURE_TIME(*a + *b);
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
@@ -1354,8 +1357,6 @@ public:
             // const auto c = b + a;
             // MEASURE_TIME(*a->sin());
             // std::cout << *a->cos()->sin() << std::endl;
-
-
         }
 
         // {
@@ -1485,23 +1486,23 @@ public:
     }
     // 运行所有测试
     static void run_all_tests() {
-        // test_expand();
-        test_OP();
-        // test_slice();
-        // test_repeat();
-        // test_stack();
+        test_expand();
+        // test_OP();
+        test_slice();
+        test_repeat();
+        test_stack();
         // test_randn();
-        // test_flatten();
-        // test_permute();
+        test_flatten();
+        test_permute();
         // test_omp();
-        // test_cat();
-        // test_unsqueeze();
-        // test_squeeze();
-        // test_view();
-        // test_clone();
-        // test_reshape();
-        // test_non_contiguous();
-        // test_transpose();
+        test_cat();
+        test_unsqueeze();
+        test_squeeze();
+        test_view();
+        test_clone();
+        test_reshape();
+        test_non_contiguous();
+        test_transpose();
         std::cout << "All tests passed!" << std::endl;
     }
 };

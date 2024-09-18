@@ -6,6 +6,16 @@
 #include "./lib/pcg/pcg_random.hpp"
 
 namespace Breeze {
+    template<typename ScalarT, index_t VecSize>
+    struct ArangeIndices {
+        static constexpr std::array<ScalarT, VecSize> values = [](){
+            std::array<ScalarT, VecSize> arr{};
+            for (int i = 0; i < VecSize; ++i) {
+                arr[i] = static_cast<ScalarT>(i);
+            }
+            return arr;
+        }();
+    };
 
     template<typename ... ScalarTypes>
     void CPUTensorOps<ScalarTypes...>::fill(Tensor<ScalarT1> &a, ScalarT1 value) const {
@@ -17,6 +27,30 @@ namespace Breeze {
             },
             [value](ScalarT1 *out_ptr) {
                 auto out_vec = Vectorized<ScalarT1>(value);
+                out_vec.store(out_ptr);
+            }
+
+        );
+    }
+
+    template<typename ... ScalarTypes>
+    void CPUTensorOps<ScalarTypes...>::arange(Tensor<ScalarT1> &a, const ScalarT1 start,const ScalarT1 step) const {
+        using ScalarT1 = typename BaseOps::ScalarT1;
+        auto iter = TensorIterator<ScalarT1>::nullary_op(a);
+        iter.cpu_kernel_vec(
+            [&a, start, step](ScalarT1 *out_ptr) {
+                auto offset_index = out_ptr - a.mutable_data();
+                *out_ptr = offset_index * step + start;
+            },
+            [&a, start, step](ScalarT1 *out_ptr) {
+                auto offset_index = out_ptr - a.mutable_data();
+                constexpr int vec_size = Vectorized<ScalarT1>::size();
+                constexpr auto inc_indices = ArangeIndices<ScalarT1, vec_size>::values;
+                auto inc_indices_vec = Vectorized<ScalarT1>::loadu(inc_indices.data());
+                auto start_vec = Vectorized<ScalarT1>(start);
+                auto offset_vec = Vectorized<ScalarT1>(offset_index);
+                auto step_vec = Vectorized<ScalarT1>(step);
+                Vectorized<ScalarT1> out_vec = (inc_indices_vec + offset_vec + start_vec) * step_vec;
                 out_vec.store(out_ptr);
             }
         );

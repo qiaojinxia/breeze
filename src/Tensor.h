@@ -78,7 +78,7 @@ public:
 
     [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
     [[nodiscard]] virtual std::shared_ptr<Tensor> contiguous() = 0;
-    [[nodiscard]] virtual const ScalarType& at(const std::vector<size_t>& indices) const = 0;
+    [[nodiscard]] virtual const ScalarType& at(const std::vector<index_t>& indices) const = 0;
     virtual void set_value(const std::vector<index_t>& indices, ScalarType value) = 0;
 
     [[nodiscard]] virtual index_t size() const;
@@ -142,21 +142,22 @@ template<typename scalar_t>
 bool Tensor<scalar_t>::is_contiguous_in_range(const index_t start_dim, index_t end_dim) const {
     const std::vector<index_t>& shape = get_shape().dims();
     const std::vector<index_t>& strides = get_strides();
+    const auto ndim = get_shape().ndim();
 
-    if (shape.empty() || (shape.size() == 1 && shape[0] == 0)) {
+    if (shape.empty() || (ndim == 1 && shape[0] == 0)) {
         return true;
     }
 
     if (end_dim == -1) {
-        end_dim = shape.size() - 1;
+        end_dim = ndim - 1;
     }
 
-    if (start_dim > end_dim || end_dim >= shape.size()) {
+    if (start_dim > end_dim || end_dim >= ndim) {
         throw std::invalid_argument("Invalid dimension range");
     }
-    index_t expected_stride = 1;
 
-    for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
+    index_t expected_stride = 1;
+    for (index_t i = ndim - 1; i >= 0; --i) {
         if (i <= end_dim && i >= start_dim && shape[i] != 1 && strides[i] != expected_stride) {
             return false;
         }

@@ -61,7 +61,6 @@ if(IS_MACOS)
     # Use Clang as the compiler
     set(CMAKE_C_COMPILER clang)
     set(CMAKE_CXX_COMPILER clang++)
-    # Manually specify SLEEF installation directory if not found
     set(SLEEF_ROOT "${HOMEBREW_PREFIX}/opt/sleef")
     find_package(SLEEF REQUIRED PATHS ${SLEEF_ROOT})
     set(SLEEF_LIB "${HOMEBREW_PREFIX}/lib/libsleef.3.dylib")

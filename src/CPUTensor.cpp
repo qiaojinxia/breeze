@@ -4,6 +4,7 @@
 #include <cblas.h>
 #include "CPUTensorOps.h"
 
+
 namespace Breeze {
     template<typename ScalarType>
     CPUTensor<ScalarType>::~CPUTensor() = default;
@@ -102,9 +103,6 @@ namespace Breeze {
     DEFINE_BINARY_OP(operator*, multiply)
     DEFINE_BINARY_OP(operator/, divide)
 
-
-
-
     template<typename ScalarType>
     std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::randn(std::vector<index_t> shape) {
         // 创建一个新的 CPUTensor
@@ -115,7 +113,7 @@ namespace Breeze {
 
     template<typename ScalarType>
     ScalarType CPUTensor<ScalarType>::operator[](const std::string& index) const{
-        //todo
+        std::cout << index << std::endl;
         return this->at({1,2,3});
     }
 
@@ -138,53 +136,55 @@ namespace Breeze {
             throw std::invalid_argument("New shape cannot be empty");
         }
 
-        index_t new_size = 1;
-        index_t dynamic_dim = -1;
-        std::vector<index_t> actual_new_shape;
-        actual_new_shape.reserve(new_shape.size());
-        const index_t origin_total_size = this->get_shape().total_size();
+        const auto new_shape_ndim = static_cast<index_t>(new_shape.size());
 
-        for (size_t i = 0; i < new_shape.size(); ++i) {
+        index_t computed_size = 1;
+        index_t inferred_dim_index = -1;
+        std::vector<index_t> final_shape;
+        final_shape.reserve(new_shape_ndim);
+        const index_t original_total_elements = this->get_shape().total_size();
+
+        for (index_t i = 0; i < new_shape_ndim; ++i) {
             if (new_shape[i] == -1) {
-                if (dynamic_dim != -1) {
-                    throw std::invalid_argument("Only one dimension can be -1 in reshape");
+                if (inferred_dim_index != -1) {
+                    throw std::invalid_argument("Only one dimension can be inferred (-1) in reshape_view");
                 }
-                dynamic_dim = static_cast<index_t>(i);
-                actual_new_shape.push_back(-1);
+                inferred_dim_index = i;
+                final_shape.push_back(-1);
             } else if (new_shape[i] > 0) {
-                actual_new_shape.push_back(new_shape[i]);
-                new_size *= new_shape[i];
+                final_shape.push_back(new_shape[i]);
+                computed_size *= new_shape[i];
             } else {
-                throw std::invalid_argument(Utils::Format("Invalid shape dimension %zu", new_shape[i]));
+                throw std::invalid_argument(Utils::Format("Invalid shape dimension %d", new_shape[i]));
             }
         }
 
-        // 处理动态维度
-        if (dynamic_dim != -1) {
-            if (this->size() % new_size != 0) {
-                throw std::invalid_argument(Utils::Format("Cannot reshape tensor of size %zu into the specified shape", this->size()));
+        // 处理需要推断的维度
+        if (inferred_dim_index != -1) {
+            if (original_total_elements % computed_size != 0) {
+                throw std::invalid_argument(Utils::Format("Cannot reshape tensor of %d elements into the requested shape", original_total_elements));
             }
-            actual_new_shape[dynamic_dim] = origin_total_size / new_size;
-            new_size *= actual_new_shape[dynamic_dim];
+            final_shape[inferred_dim_index] = original_total_elements / computed_size;
+            computed_size *= final_shape[inferred_dim_index];
         }
 
-        // 检查新旧大小是否匹配
-        if (new_size != origin_total_size) {
-            throw std::invalid_argument(Utils::Format("Cannot reshape tensor of size %zu into the specified shape", this->size()));
+        // 验证新旧元素总数是否匹配
+        if (computed_size != original_total_elements) {
+            throw std::invalid_argument(Utils::Format("Cannot reshape tensor of %d elements into the requested shape", original_total_elements));
         }
 
         // 处理标量的特殊情况
-        if (origin_total_size == 1) {
-            return std::make_shared<CPUTensor>(memory_block_, this->offset_, actual_new_shape);
+        if (original_total_elements == 1) {
+            return std::make_shared<CPUTensor>(memory_block_, this->offset_, final_shape);
         }
 
-        // 如果张量是连续的，使用 view
+        // 如果张量是连续的，直接创建新视图
         if (this->is_contiguous()) {
-            return this->view(std::move(actual_new_shape));
+            return this->view(std::move(final_shape));
         }
 
-        // 如果张量不是连续的，先 clone 再 view
-        return this->clone()->view(std::move(actual_new_shape));
+        // 如果张量不是连续的，先创建副本再创建视图
+        return this->clone()->view(std::move(final_shape));
     }
 
 
@@ -249,7 +249,7 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
-    const ScalarType& CPUTensor<ScalarType>::at(const std::vector<size_t>& indices) const {
+    const ScalarType& CPUTensor<ScalarType>::at(const std::vector<index_t>& indices) const {
         index_t offset = this->offset_;
         auto strides = this->get_strides();
         for (size_t i = 0; i < indices.size(); ++i) {
@@ -278,22 +278,22 @@ namespace Breeze {
             os << ")" << std::endl;
             return;
         }
-        std::function<void(const std::vector<size_t>&, size_t, const std::string&)> print_recursive;
-        print_recursive = [&](const std::vector<size_t>& indices, size_t dim, const std::string& indent) {
+        std::function<void(const std::vector<index_t>&, size_t, const std::string&)> print_recursive;
+        print_recursive = [&](const std::vector<index_t>& indices, index_t dim, const std::string& indent) {
             os << "[";
-            if (dim == shape_.size() - 1) {
-                for (size_t i = 0; i < shape_[dim]; ++i) {
+            if (dim == static_cast<index_t>(shape_.size()) - 1) {
+                for (index_t i = 0; i < shape_[dim]; ++i) {
                     if (i > 0) os << ", ";
-                    std::vector<size_t> current_indices = indices;
+                    std::vector<index_t> current_indices = indices;
                     current_indices.push_back(i);
                     os << this->at(current_indices);
                 }
                 os << "]";
             } else {
                 const std::string new_indent = indent + " ";
-                for (size_t i = 0; i < shape_[dim]; ++i) {
+                for (index_t i = 0; i < shape_[dim]; ++i) {
                     if (i > 0) os << "\n" << new_indent;
-                    std::vector<size_t> current_indices = indices;
+                    std::vector<index_t> current_indices = indices;
                     current_indices.push_back(i);
                     print_recursive(current_indices, dim + 1, new_indent);
                     if (i < shape_[dim] - 1) os << ",";
@@ -310,6 +310,7 @@ namespace Breeze {
 
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
+        const index_t original_ndim = this->get_shape().ndim();
 
         if (original_shape.empty()) {
             return this->shared_from_this();
@@ -319,11 +320,12 @@ namespace Breeze {
             throw std::invalid_argument(Utils::Format("too many indices for tensor of dimension %d", original_shape.size()));
         }
 
-        std::vector<index_t> new_shape;
+        std::vector<index_t> final_shape;
         index_t new_offset = this->offset_;
         std::vector<index_t> new_strides;
-        new_strides.reserve(original_shape.size());
-        for (size_t i = 0; i < range_strings.size(); ++i) {
+        new_strides.reserve(original_ndim);
+
+        for (index_t i = 0; i < static_cast<index_t>(range_strings.size()); ++i) {
             const index_t dim_size = original_shape[i];
             auto slice_params = Utils::parseSliceString(range_strings[i], dim_size);
 
@@ -367,37 +369,37 @@ namespace Breeze {
                 }
             }
             new_offset += start * original_strides[i];
-            new_shape.push_back(new_dim_size);
+            final_shape.push_back(new_dim_size);
             auto stride  =  new_dim_size == 1 ? original_strides[i]: original_strides[i] * step;
             new_strides.push_back(stride);
         }
 
         // 处理未指定的维度（保持原样）
-        for (size_t i = range_strings.size(); i < original_shape.size(); ++i) {
-            new_shape.push_back(original_shape[i]);
+        for (auto i = static_cast<index_t>(range_strings.size()); i < original_ndim; ++i) {
+            final_shape.push_back(original_shape[i]);
             new_strides.push_back(original_strides[i]);
         }
-        return std::make_shared<CPUTensor>(memory_block_, new_offset, std::move(new_shape), std::move(new_strides));
+        return std::make_shared<CPUTensor>(memory_block_, new_offset, std::move(final_shape), std::move(new_strides));
 
     }
 
     template <typename ScalarType>
     [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::transpose(const index_t dim0, const index_t dim1) const {
-        const index_t ndim = this->get_shape().ndim();
+        const index_t original_ndim = this->get_shape().ndim();
         std::vector<index_t> new_shape = this->get_shape().dims();
         std::vector<index_t> new_strides = this->get_strides();
 
         // 处理标量（0、1维张量）的情况
-        if (ndim <= 1) {
+        if (original_ndim <= 1) {
             return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
         }
 
         // 检查维度的有效性
-        const index_t adjusted_dim0 = dim0 < 0 ? dim0 + ndim : dim0;
-        const index_t adjusted_dim1 = dim1 < 0 ? dim1 + ndim : dim1;
+        const index_t adjusted_dim0 = dim0 < 0 ? dim0 + original_ndim : dim0;
+        const index_t adjusted_dim1 = dim1 < 0 ? dim1 + original_ndim : dim1;
 
-        if (adjusted_dim0 < 0 || adjusted_dim0 >= ndim ||
-            adjusted_dim1 < 0 || adjusted_dim1 >= ndim) {
+        if (adjusted_dim0 < 0 || adjusted_dim0 >= original_ndim ||
+            adjusted_dim1 < 0 || adjusted_dim1 >= original_ndim) {
             throw std::out_of_range("Invalid dimensions for transpose");
             }
 
@@ -413,35 +415,35 @@ namespace Breeze {
 
     template <typename ScalarType>
     [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::permute(const std::vector<index_t>& dims) {
-        const index_t ndim = this->get_shape().ndim();
+        const index_t original_ndim = this->get_shape().ndim();
 
         // 检查维度数量是否匹配
-        if (static_cast<index_t>(dims.size()) != ndim) {
+        if (static_cast<index_t>(dims.size()) != original_ndim) {
             throw std::invalid_argument(Utils::Format("number of dimensions in the tensor input does not match the length of the desired ordering of "
-                                                      "dimensions i.e. input.dim() = %d is not equal to len(dims) = %d", dims.size(), ndim));
+                                                      "dimensions i.e. input.dim() = %d is not equal to len(dims) = %d", dims.size(), original_ndim));
         }
         //标量和向量保持不变
-        if (ndim <= 1) {
+        if (original_ndim <= 1) {
             return this->shared_from_this();
         }
 
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& old_strides = this->get_strides();
 
-        std::vector<index_t> new_shape(ndim);
-        std::vector<index_t> new_strides(ndim);
-        std::vector<bool> used(ndim, false);
+        std::vector<index_t> new_shape(original_ndim);
+        std::vector<index_t> new_strides(original_ndim);
+        std::vector<bool> used(original_ndim, false);
 
-        for (int32_t i = 0; i < ndim; ++i) {
+        for (index_t i = 0; i < original_ndim; ++i) {
             index_t dim = dims[i];
             // 处理负数维度
             if (dim < 0) {
-                dim += ndim;
+                dim += original_ndim;
             }
 
             // 检查维度的有效性
-            if (dim < 0 || dim >= ndim) {
-                throw std::out_of_range(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", -ndim, ndim-1, dims[i]));
+            if (dim < 0 || dim >= original_ndim) {
+                throw std::out_of_range(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", -original_ndim, original_ndim-1, dims[i]));
             }
 
             // 检查维度是否重复
@@ -455,8 +457,7 @@ namespace Breeze {
         }
 
         // 创建新的 CPUTensor，共享原始数据，但其他属性都是新的
-        return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides)
-        );
+        return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
     }
 
     template <typename ScalarType>
@@ -466,22 +467,22 @@ namespace Breeze {
 
     template <typename ScalarType>
     [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::flatten(index_t start_dim, index_t end_dim) {
-        const index_t ndim = this->get_shape().ndim();
+        const index_t original_ndim = this->get_shape().ndim();
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& origin_strides = get_strides();
 
         // 处理负数维度
-        if (start_dim < 0) start_dim += ndim;
-        if (end_dim < 0) end_dim += ndim;
+        if (start_dim < 0) start_dim += original_ndim;
+        if (end_dim < 0) end_dim += original_ndim;
 
         if(start_dim == end_dim || original_shape.empty()) {
             return this->shared_from_this();
         }
 
         // 确保维度在有效范围内
-        if (start_dim < 0 || start_dim >= ndim || end_dim < 0 || end_dim >= ndim || start_dim > end_dim) {
+        if (start_dim < 0 || start_dim >= original_ndim || end_dim < 0 || end_dim >= original_ndim || start_dim > end_dim) {
             throw std::out_of_range(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)",
-                -ndim, ndim - 1, start_dim == ndim ? start_dim : end_dim));
+                -original_ndim, original_ndim - 1, start_dim == original_ndim ? start_dim : end_dim));
         }
 
         std::vector<index_t> new_shape;
@@ -506,7 +507,7 @@ namespace Breeze {
         new_strides.push_back(1);
 
         // 添加 end_dim 之后的维度
-        for (index_t i = end_dim + 1; i < ndim; ++i) {
+        for (index_t i = end_dim + 1; i < original_ndim; ++i) {
             new_shape.push_back(original_shape[i]);
             new_strides.push_back(origin_strides[i]);
         }
@@ -526,18 +527,22 @@ namespace Breeze {
     template <typename ScalarType>
     [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::repeat(const std::vector<index_t>& repeats) const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
+        const index_t original_ndim = this->get_shape().ndim();
+        const auto repeats_size = static_cast<index_t>(repeats.size());
+        const auto& original_strides = this->get_strides();
+
         std::vector<index_t> new_shape;
-        new_shape.reserve(repeats.size());
+        new_shape.reserve(repeats_size);
 
         if (original_shape.empty())
             throw std::invalid_argument("Cannot repeat a scalar (0-dimensional tensor)");
 
-        if (repeats.size() < original_shape.size())
+        if (repeats_size < original_ndim)
             throw std::invalid_argument("Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor");
 
-        const size_t prepend_dims = repeats.size() > original_shape.size() ? repeats.size() - original_shape.size() : 0;
+        const index_t prepend_dims = repeats_size > original_ndim ? repeats_size - original_ndim : 0;
 
-        for (size_t i = 0; i < repeats.size(); ++i) {
+        for (index_t i = 0; i < repeats_size; ++i) {
             if (repeats[i] == 0)
                 throw std::invalid_argument(Utils::Format("Trying to create tensor with zero dimension at index %d", i));
             if (repeats[i] < 0)
@@ -554,36 +559,30 @@ namespace Breeze {
         const ScalarType* src_data = this->data();
         ScalarType* dst_data = dst_tensor->mutable_data();
 
-        const auto& src_shape = this->shape.dims();
-        const index_t src_ndim = this->shape.ndim();
-        const auto& src_strides = this->get_strides();
-
         // 计算外部循环的维度
         index_t outer_dim = 1;
-        for (size_t d = 0; d < new_shape.size() - src_ndim; ++d) {
+        for (index_t d = 0; d <  repeats_size - original_ndim; ++d) {
             outer_dim *= new_shape[d];
         }
-
-        const size_t inner_dim = dst_tensor->size() / outer_dim;
+        const index_t inner_dim = outer_dim > 0 ? dst_tensor->size() / outer_dim : 0;
 
         #pragma omp parallel
-        for (size_t i = 0; i < outer_dim; ++i) {
+        for (index_t i = 0; i < outer_dim; ++i) {
             const index_t dst_offset = i * inner_dim;
 
             for (index_t j = 0; j < inner_dim; ++j) {
                 index_t idx = j;
                 index_t src_offset = this->offset_;
 
-                for (index_t k = src_ndim - 1; k >= 0; --k) {
-                    index_t src_idx = (idx % new_shape[k + prepend_dims]) % src_shape[k];
+                for (index_t k = original_ndim - 1; k >= 0; --k) {
+                    index_t src_idx = (idx % new_shape[k + prepend_dims]) % original_shape[k];
                     idx /= new_shape[k + prepend_dims];
-                    src_offset += src_idx * src_strides[k];
+                    src_offset += src_idx * original_strides[k];
                 }
 
                 dst_data[dst_offset + j] = src_data[src_offset];
             }
         }
-
         return dst_tensor;
     }
 
@@ -599,14 +598,13 @@ namespace Breeze {
 
     template <typename ScalarType>
     std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::clone() const {
-        const index_t ndim = this->shape.ndim();
-
+        const index_t original_ndim = this->shape.ndim();
         const std::vector<index_t> original_shape = this->shape.dims();
         const std::vector<index_t>& original_strides = this->get_strides();
         const ScalarType* src_data = this->data();
 
         // 处理 0 维度（标量）的情况
-        if (ndim == 0) {
+        if (original_ndim == 0) {
             auto dst_tensor = std::make_shared<CPUTensor>(Shape{});
             dst_tensor->mutable_data()[0] = src_data[this->offset_];
             return dst_tensor;
@@ -624,19 +622,19 @@ namespace Breeze {
 
         // 计算外部循环的维度
         index_t outer_dim = 1;
-        for (index_t d = 0; d < ndim - 1; ++d) {
+        for (index_t d = 0; d < original_ndim - 1; ++d) {
             outer_dim *= original_shape[d];
         }
 
         const index_t copy_size = original_shape.back();
-        const index_t src_inc_step = original_strides[ndim-1];
+        const index_t src_inc_step = original_strides[original_ndim-1];
 
         for (index_t i = 0; i < outer_dim; ++i) {
             index_t src_offset = this->offset_;
             index_t dst_offset = 0;
             index_t idx = i;
 
-            for (index_t j = std::max(ndim - 2, static_cast<index_t>(0)); j >= 0; --j) {
+            for (index_t j = std::max(original_ndim - 2, static_cast<index_t>(0)); j >= 0; --j) {
                 index_t _idx_ = idx % original_shape[j];
                 idx /= original_shape[j];
                 src_offset += _idx_ * original_strides[j];
@@ -678,7 +676,7 @@ namespace Breeze {
         actual_shape.reserve(new_dims);
 
         for (index_t i = 0; i < new_dims; ++i) {
-            if (index_t dim = new_shape[i];dim == -1) {
+            if (index_t dim = new_shape[i]; dim == -1) {
                 if (dynamic_dim != -1) {
                     throw std::invalid_argument("Only one dimension can be -1 in view");
                 }
@@ -715,27 +713,28 @@ namespace Breeze {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
         const index_t original_ndim = this->get_shape().ndim();
+
         std::vector<index_t> new_shape;
         std::vector<index_t> new_strides;
 
-        new_shape.reserve(original_shape.size() + 1);
-        new_strides.reserve(original_shape.size() + 1);
+        new_shape.reserve(original_ndim + 1);
+        new_strides.reserve(original_ndim + 1);
 
         // 处理负数维度
-        const size_t adjusted_dim = dim < 0 ? static_cast<index_t>(original_shape.size()) + dim + 1 : dim;
-        if (adjusted_dim > original_ndim) {
+        const index_t adjusted_dim = dim < 0 ? original_ndim + dim + 1 : dim;
+        if (adjusted_dim < 0 || adjusted_dim > original_ndim) {
             throw std::out_of_range(
-                Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got 4)",
+                Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)",
                     (original_shape.size() + 1) * -1, original_shape.size() -1, dim));
         }
         //处理下 维度 超过
-        for (size_t i = 0; i < original_shape.size() + 1; ++i) {
+        for (index_t i = 0; i < original_ndim + 1; ++i) {
             if (i == adjusted_dim) {
                 new_shape.push_back(1);
                 new_strides.push_back(1);
             }
 
-            if (i < original_shape.size()) {
+            if (i < original_ndim) {
                 new_shape.push_back(original_shape[i]);
                 new_strides.push_back(original_strides[i]);
             }
@@ -750,14 +749,15 @@ namespace Breeze {
     std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::squeeze() const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
+        const index_t original_ndim = this->get_shape().ndim();
 
         std::vector<index_t> new_shape;
         std::vector<index_t> new_strides;
 
-        new_shape.reserve(original_shape.size());
-        new_strides.reserve(original_shape.size());
+        new_shape.reserve(original_ndim);
+        new_strides.reserve(original_ndim);
 
-        for (size_t i = 0; i < original_shape.size(); ++i) {
+        for (index_t i = 0; i < original_ndim; ++i) {
             // 如果维度不是1或者是广播维度，则保留
             if (original_shape[i] != 1 || original_strides[i] == 0) {
                 new_shape.push_back(original_shape[i]);
@@ -772,19 +772,21 @@ namespace Breeze {
     std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::squeeze(const index_t dim) const {
         const std::vector<index_t>& original_shape = this->get_shape().dims();
         const std::vector<index_t>& original_strides = this->get_strides();
+        const index_t original_ndim = this->get_shape().ndim();
 
         std::vector<index_t> new_shape;
         std::vector<index_t> new_strides;
 
-        new_shape.reserve(original_shape.size());
-        new_strides.reserve(original_shape.size());
+        new_shape.reserve(original_ndim);
+        new_strides.reserve(original_ndim);
 
-        const index_t adjusted_dim = dim < 0 ? static_cast<index_t>(original_shape.size()) + dim : dim;
-        if (adjusted_dim >= original_shape.size()) {
+        const index_t adjusted_dim = dim < 0 ? original_ndim + dim : dim;
+        if (adjusted_dim < 0 || adjusted_dim >= original_ndim) {
             throw std::out_of_range(
-                Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", new_shape.size() * -1,  new_shape.size() -1, dim));
+                Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)",
+                    new_shape.size() * -1,  new_shape.size() -1, dim));
         }
-        for (index_t i = 0; i < original_shape.size(); ++i) {
+        for (index_t i = 0; i < original_ndim; ++i) {
             // 如果 不是当前维度 维度不是1 或者广播 维度 都去不掉
             if (i != adjusted_dim || original_shape[i] != 1 || original_strides[i] == 0) {
                 new_shape.push_back(original_shape[i]);
@@ -802,18 +804,18 @@ namespace Breeze {
     std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::expand(const std::vector<index_t>& new_shape) const {
             const std::vector<index_t>& original_shape = this->get_shape().dims();
             const std::vector<index_t>& original_strides = this->get_strides();
+            const index_t original_ndim = this->get_shape().ndim();
+            const auto expand_size = static_cast<index_t>(new_shape.size());
+            // 计算左侧新增的维度数量
+            const index_t left_padding = expand_size - original_ndim;
 
             // 检查新shape的维度数是否小于当前shape
-            if (new_shape.size() < original_shape.size()) {
+            if (left_padding < 0) {
                 throw std::invalid_argument("New shape must have at least as many dimensions as the current shape");
             }
 
-            std::vector<index_t> actual_new_shape(new_shape.size());
-            std::vector<index_t> new_strides(new_shape.size());
-
-            // 计算左侧新增的维度数量
-            const index_t left_padding = new_shape.size() - original_shape.size();
-
+            std::vector<index_t> actual_new_shape(expand_size);
+            std::vector<index_t> new_strides(expand_size);
 
             // 处理左侧新增的维度
             for (index_t i = 0; i < left_padding; ++i) {
@@ -826,7 +828,7 @@ namespace Breeze {
             }
 
             // 处理原有维度
-            for (size_t i = 0; i < original_shape.size(); ++i) {
+            for (index_t i = 0; i < original_ndim; ++i) {
                 if (const index_t new_index = i + left_padding;
                     new_shape[new_index] == -1 || new_shape[new_index] == original_shape[i]) {
                     actual_new_shape[new_index] = original_shape[i];
@@ -850,16 +852,10 @@ namespace Breeze {
         if ((step > 0 && start >= end) || (step < 0 && start <= end)) {
             throw std::invalid_argument("invalid range");
         }
-
         const auto size = static_cast<index_t>(std::ceil((end - start) / step));
-        std::vector<index_t> shape = {size};
-        auto tensor = std::make_shared<CPUTensor>(std::move(shape));
 
-        #pragma omp parallel for
-        for (index_t i = 0; i < size; ++i) {
-            tensor->mutable_data()[i] = start + i * step;
-        }
-
+        auto tensor = vector(size);
+        CPUTensorOps<ScalarType>::getInstance().arange(*tensor, start, step);
         return tensor;
     }
 
@@ -872,7 +868,7 @@ namespace Breeze {
     }
 
     template <typename ScalarType>
-    std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::vector(index_t size) {
+    std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::vector(const index_t size) {
         std::vector<index_t> shape = {size};
         return std::make_shared<CPUTensor>(std::move(shape));
     }
@@ -883,7 +879,7 @@ namespace Breeze {
             throw std::invalid_argument("No tensors provided for stacking");
         }
 
-        const index_t ndim = tensors[0]->get_shape().ndim();
+        const index_t original_ndim = tensors[0]->get_shape().ndim();
         for (size_t i = 0; i < tensors.size(); ++i) {
             if (const auto& tensor = tensors[i]; tensor->get_shape() != tensors[0]->get_shape()) {
                 throw std::invalid_argument(Utils::Format("stack expects each tensor to be equal size, but got %s at entry %d and %s at entry %d",
@@ -891,20 +887,17 @@ namespace Breeze {
             }
         }
 
-        if (dim < 0) {dim += ndim + 1;} // +1 because we're adding a new dimension
-
-        if (dim < 0 || dim > ndim) {
+        if (dim < 0) {dim += original_ndim + 1;} // +1 because we're adding a new dimension
+        if (dim < 0 || dim > original_ndim) {
             throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d],"
-                                                      " but got %d)", -ndim, ndim - 1, dim));
+                                                      " but got %d)", -original_ndim, original_ndim - 1, dim));
         }
 
         // 计算新的形状
         std::vector<index_t> new_shape = tensors[0]->get_shape().dims();
         new_shape.insert(new_shape.begin() + dim, tensors.size());
-
         // 创建结果张量
         auto result = std::make_shared<CPUTensor>(std::move(new_shape));
-
         // 在视图上执行cat操作
         combine_tensors_out(tensors, dim, result.get());
 
@@ -921,37 +914,37 @@ namespace Breeze {
             return std::dynamic_pointer_cast<CPUTensor<ScalarType>>(tensors[0]->contiguous());
         }
 
-        index_t ndim = tensors[0]->get_shape().ndim();
-        std::vector<index_t> new_shape = tensors[0]->get_shape().dims();
+        index_t original_ndim = tensors[0]->get_shape().ndim();
+        std::vector<index_t> original_shape = tensors[0]->get_shape().dims();
 
-        if (dim < 0) {dim += ndim;}
-        if (dim < 0 || dim >= ndim) {
-            throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", -ndim, ndim-1, dim));
+        if (dim < 0) {dim += original_ndim;}
+        if (dim < 0 || dim >= original_ndim) {
+            throw std::invalid_argument(Utils::Format("Dimension out of range (expected to be in range of [%d, %d], but got %d)", -original_ndim, original_ndim-1, dim));
         }
 
-        index_t concat_dim_size = new_shape[dim];
+        index_t concat_dim_size = original_shape[dim];
 
         for (size_t i = 1; i < tensors.size(); ++i) {
             if (tensors[i]->get_shape().ndim() == 0) {
                 throw std::invalid_argument(Utils::Format("zero-dimensional tensor (at position %d) cannot be concatenated", i));
             }
 
-            if (tensors[i]->get_shape().ndim() != ndim) {
-                throw std::invalid_argument(Utils::Format("Tensors must have same number of dimensions: got %d and %d", tensors[i]->get_shape().ndim(), ndim));
+            if (tensors[i]->get_shape().ndim() != original_ndim) {
+                throw std::invalid_argument(Utils::Format("Tensors must have same number of dimensions: got %d and %d", tensors[i]->get_shape().ndim(), original_ndim));
             }
 
             concat_dim_size += tensors[i]->get_shape().dims()[dim];
-            for (index_t j = 0; j < ndim; ++j) {
-                if (j != dim && tensors[i]->get_shape().dims()[j] != new_shape[j]) {
+            for (index_t j = 0; j < original_ndim; ++j) {
+                if (j != dim && tensors[i]->get_shape().dims()[j] != original_shape[j]) {
                     throw std::invalid_argument(
                         Utils::Format("Sizes of tensors must match except in dimension %d. Expected size %d but got size %d "
-                                      "for tensor number %d in the list.", dim, new_shape[j], tensors[i]->get_shape().dims()[j], i));
+                                      "for tensor number %d in the list.", dim, original_shape[j], tensors[i]->get_shape().dims()[j], i));
                 }
             }
         }
 
-        new_shape[dim] = concat_dim_size;
-        auto result = std::make_shared<CPUTensor<ScalarType>>(std::move(new_shape));
+        original_shape[dim] = concat_dim_size;
+        auto result = std::make_shared<CPUTensor<ScalarType>>(std::move(original_shape));
         combine_tensors_out(tensors, dim, result.get());
         return result;
     }
@@ -961,7 +954,7 @@ namespace Breeze {
         if (tensors.empty()) {
             throw std::invalid_argument("No tensors provided for concatenation");
         }
-        const index_t ndim = tensors[0]->get_shape().ndim();
+        const index_t original_ndim = tensors[0]->get_shape().ndim();
         const std::vector<index_t>& new_shape = result->get_shape().dims();
         ScalarType* result_data = result->mutable_data();
 
@@ -974,7 +967,7 @@ namespace Breeze {
         }
 
         index_t block_size = 1;
-        for (index_t s = dim + 1; s < ndim - 1; ++s) {
+        for (index_t s = dim + 1; s < original_ndim - 1; ++s) {
             block_size *= tensors[0]->get_shape().dims()[s];
         }
 
@@ -982,7 +975,7 @@ namespace Breeze {
         for (index_t i = 0; i < outer_iterations; ++i) {
             for (const auto& tensor : tensors) {
                 // 最后一维的大小，如果 dim 是最后一个维度也就是按列，返回 1
-                index_t last_dim_size = dim >= ndim ? 1 : tensor->get_shape().dims()[ndim - 1];
+                index_t last_dim_size = dim >= original_ndim ? 1 : tensor->get_shape().dims()[original_ndim - 1];
 
                 auto _block_size = block_size;
                 // 计算每次复制的块大小（不包括最后一维）
@@ -992,7 +985,7 @@ namespace Breeze {
                 const std::vector<index_t>& src_strides = src_tensor->get_strides();
                 const std::vector<index_t>& src_shape = src_tensor->get_shape().dims();
 
-                if (src_shape.size() >= 2 && dim <= src_shape.size() - 2) {
+                if (src_shape.size() >= 2 && dim <= src_tensor->get_shape().ndim() - 2) {
                     _block_size *= src_shape[dim];
                 }
 
@@ -1021,7 +1014,7 @@ namespace Breeze {
                             remaining /= new_shape[d];
                         }
 
-                        const index_t src_inc_step = src_strides[ndim-1];
+                        const index_t src_inc_step = src_strides[original_ndim-1];
                         index_t src_blas_offset = src_inc_step < 0 ? current_src_offset + (last_dim_size - 1) * src_inc_step : current_src_offset;
 
                         if constexpr (std::is_same_v<ScalarType, float>) {
