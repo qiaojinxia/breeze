@@ -1344,19 +1344,19 @@ public:
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
             //
-            // const auto a = CPUTensor<float>::randn({1000, 1000, 1000});
-            // const auto b = CPUTensor<float>::randn({1000, 1000, 1000});
+            const auto a = CPUTensor<float>::randn({1000, 1000, 1000});
+            const auto b = CPUTensor<float>::randn({1000, 1000, 1000});
             // std::cout << *a << std::endl;
-            // MEASURE_TIME(*a + *b);
+            MEASURE_TIME(*a += *b);
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
 
-            {
-                auto a = CPUTensor<float>::arange(0,100,0.5);
-                auto b = CPUTensor<float>::arange(100,200,0.5);
-                *a += *b;
-                std::cout << *a << std::endl;
-            }
+            // {
+            //     auto a = CPUTensor<float>::arange(0,100,0.5);
+            //     auto b = CPUTensor<float>::arange(100,200,0.5);
+            //     *a += *b;
+            //     std::cout << *a << std::endl;
+            // }
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);

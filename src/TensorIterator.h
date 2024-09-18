@@ -43,6 +43,12 @@ namespace Breeze {
         //输出类型 的大小
         static constexpr size_t ResultTypeSize = sizeof(OutputScalarType);
 
+        struct Options {
+            bool check_all_same_dtype = false;
+            bool enforce_safe_casting_to_output = false;
+            bool resize_outputs = false;
+            bool no_broadcast = false;
+        };
         struct OperandInfo {
             char* data{};
             std::vector<index_t> strides ={};
@@ -63,6 +69,26 @@ namespace Breeze {
             ScalarType(TypeToScalarType<T>::value) {}
         };
 
+        // 设置选项的方法
+        TensorIterator& set_check_all_same_dtype(bool value) {
+            options.check_all_same_dtype = value;
+            return *this;
+        }
+
+        TensorIterator& set_enforce_safe_casting_to_output(bool value) {
+            options.enforce_safe_casting_to_output = value;
+            return *this;
+        }
+
+        TensorIterator& set_resize_outputs(bool value) {
+            options.resize_outputs = value;
+            return *this;
+        }
+
+        TensorIterator& set_no_broadcast(bool value) {
+            options.no_broadcast = value;
+            return *this;
+        }
 
         TensorIterator() = default;
 
@@ -85,6 +111,7 @@ namespace Breeze {
             TensorIterator<InputScalarType, OutputScalarType> iter;
             iter.template add_input<0, InputScalarType>(input);
             iter.template add_output<1, OutputScalarType>(out);
+            iter.set_no_broadcast(true);
             iter.build(std::make_index_sequence<1>{});
             return iter;
         }
@@ -133,7 +160,15 @@ namespace Breeze {
         template <std::size_t... Is>
         void build(std::index_sequence<Is...>) {
 
+            if (options.check_all_same_dtype) {
+                check_all_same_dtype();
+            }
+
             shape_ = compute_common_shape(std::make_index_sequence<sizeof...(Is)>{});
+
+            if (options.no_broadcast) {
+                (check_no_broadcast<Is + 1>(), ...);
+            }
 
             (expand_strides_for_operand<Is>(), ...);
 
@@ -199,6 +234,7 @@ namespace Breeze {
         bool is_contiguous_{};
         bool is_inner_contiguous_{};
         size_t common_dim_{};
+        Options options;
 
         template<size_t I>
         auto& get_tensor() {
@@ -390,6 +426,23 @@ namespace Breeze {
             constexpr size_t simd_vector_size = LastVectorized::size();
             vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
             scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
+        }
+
+        void check_all_same_dtype() const{
+            ScalarType first_type = operands_[0].ScalarType;
+            for (const auto& op : operands_) {
+                if (op.ScalarType != first_type) {
+                    throw std::runtime_error("All tensors must have the same dtype.");
+                }
+            }
+        }
+
+        template<std::size_t I>
+        void check_no_broadcast() const{
+            const auto first_shape = get_shape_from_tuple<0>();
+            if (get_shape_from_tuple<I>() != first_shape) {
+                    throw std::runtime_error("All tensors must have the same shape when no_broadcast is set.");
+            }
         }
 
         void increment_counter(std::vector<index_t>& counter) const {
