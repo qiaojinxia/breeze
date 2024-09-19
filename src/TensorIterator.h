@@ -10,6 +10,7 @@
 #include <omp.h>
 #include "./platform/VectorizedAvx2.h"
 #include "ScalarType.h"
+#include "TensorIteratorConfig.h"
 
 namespace Breeze {
     static constexpr index_t GRAIN_SIZE = 131072;
@@ -33,22 +34,17 @@ namespace Breeze {
     template<typename ScalarType>
     class Tensor;
 
-    template<typename ScalarType>
-    class CPUTensor;
-
     template<typename... ScalarTypes>
     class TensorIterator {
     public:
         using OutputScalarType = LastScalarType<ScalarTypes...>;
+        using ResultScalarType = typename last_type<ScalarTypes...>::type;
+
         //输出类型 的大小
         static constexpr size_t ResultTypeSize = sizeof(OutputScalarType);
+        static constexpr size_t ScalarTypesSize = sizeof ...(ScalarTypes);
+        static constexpr size_t OptPutIndex  = ScalarTypesSize - 1;
 
-        struct Options {
-            bool check_all_same_dtype = false;
-            bool enforce_safe_casting_to_output = false;
-            bool resize_outputs = false;
-            bool no_broadcast = false;
-        };
         struct OperandInfo {
             char* data{};
             std::vector<index_t> strides ={};
@@ -57,6 +53,8 @@ namespace Breeze {
             bool is_output{false};
             bool is_read_write{false};
             ScalarType ScalarType{};
+
+            OperandInfo()= default;
 
             template <typename T>
             OperandInfo(T* data, const std::vector<index_t>& strides, const index_t offset,
@@ -69,59 +67,44 @@ namespace Breeze {
             ScalarType(TypeToScalarType<T>::value) {}
         };
 
-        // 设置选项的方法
-        TensorIterator& set_check_all_same_dtype(bool value) {
-            options.check_all_same_dtype = value;
-            return *this;
-        }
-
-        TensorIterator& set_enforce_safe_casting_to_output(bool value) {
-            options.enforce_safe_casting_to_output = value;
-            return *this;
-        }
-
-        TensorIterator& set_resize_outputs(bool value) {
-            options.resize_outputs = value;
-            return *this;
-        }
-
-        TensorIterator& set_no_broadcast(bool value) {
-            options.no_broadcast = value;
-            return *this;
-        }
-
         TensorIterator() = default;
 
+        explicit TensorIterator(const TensorIteratorConfig& config): operands_()  {
+            // 使用 config 初始化 TensorIterator
+            config_ = config;
+        }
+
         template<typename ScalarT1, typename ScalarT2>
-        static TensorIterator<ScalarT1,ScalarT2, typename BinaryOpResultType<ScalarT1, ScalarT2>::type>
-        binary_op(Tensor<typename BinaryOpResultType<ScalarT1, ScalarT2>::type> &out,
-            const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) {
+        static TensorIterator<ScalarT1, ScalarT2, typename BinaryOpResultType<ScalarT1, ScalarT2>::type>
+        binary_op(Tensor<typename BinaryOpResultType<ScalarT1, ScalarT2>::type>& out,
+          const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b,
+          const TensorIteratorConfig& config = TensorIteratorConfig::default_config()) {
             using OutputType = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
-            TensorIterator<ScalarT1, ScalarT2, OutputType> iter;
+            auto iter = config.build<ScalarT1, ScalarT2, typename BinaryOpResultType<ScalarT1, ScalarT2>::type>();
             iter.template add_input<0, ScalarT1>(a);
             iter.template add_input<1, ScalarT2>(b);
-            iter.template add_output<2, OutputType>(out);
-            iter.build(std::make_index_sequence<2>{});
+            iter.template add_output<OutputType>(out);
+            iter.build(std::make_index_sequence<3>{});
             return iter;
         }
 
         template<typename InputScalarType, typename OutputScalarType = InputScalarType>
-        static TensorIterator<InputScalarType, OutputScalarType>
-        unary_op(Tensor<OutputScalarType> &out, const Tensor<InputScalarType>& input) {
-            TensorIterator<InputScalarType, OutputScalarType> iter;
+            static TensorIterator<InputScalarType, OutputScalarType>
+            unary_op(Tensor<OutputScalarType>& out, const Tensor<InputScalarType>& input,
+         const TensorIteratorConfig& config = TensorIteratorConfig::default_config()) {
+            auto iter = config.build<InputScalarType, OutputScalarType>();
             iter.template add_input<0, InputScalarType>(input);
-            iter.template add_output<1, OutputScalarType>(out);
-            iter.set_no_broadcast(true);
-            iter.build(std::make_index_sequence<1>{});
+            iter.template add_output<OutputScalarType>(out);
+            iter.build(std::make_index_sequence<2>{});
             return iter;
         }
 
         template<typename ScalarType>
-        static TensorIterator<ScalarType>
-        nullary_op(Tensor<ScalarType> &out) {
-            TensorIterator<ScalarType> iter;
-            iter.template add_output<0, ScalarType>(out);
-            iter.build(std::make_index_sequence<0>{});
+        static TensorIterator<ScalarType> nullary_op(Tensor<ScalarType>& out,
+           const TensorIteratorConfig& config = TensorIteratorConfig::default_config()) {
+            auto iter = config.build<ScalarType>();
+            iter.template add_output<ScalarType>(out);
+            iter.build(std::make_index_sequence<1>{});
             return iter;
         }
 
@@ -135,15 +118,16 @@ namespace Breeze {
         }
 
         // 修改 add_output 方法，确保输出在最后一个模板参数位置
-        template<size_t I = sizeof...(ScalarTypes) - 1, typename ScalarType>
+        template<typename ScalarType>
         void add_output(Tensor<ScalarType>& t) {
-            std::get<I>(tensors_) = static_cast<Tensor<ScalarType>*>(&t);
+            operands_[OptPutIndex] = OperandInfo(const_cast<ScalarType*>(t.data()), t.get_strides(), t.get_offset(), true, true);
+            std::get<OptPutIndex>(tensors_) = static_cast<Tensor<ScalarType>*>(&t);
         }
 
         // 修改 add_input 方法，确保输入在前面的模板参数位置
         template<size_t I, typename ScalarType>
         void add_input(const Tensor<ScalarType>& t) {
-            operands_.emplace_back(const_cast<ScalarType*>(t.data()), t.get_strides(), t.get_offset(), false, false);
+            operands_[I] = OperandInfo(const_cast<ScalarType*>(t.data()), t.get_strides(), t.get_offset(), false, false);
             std::get<I>(tensors_) = const_cast<Tensor<ScalarType>*>(&t);
         }
 
@@ -160,33 +144,33 @@ namespace Breeze {
         template <std::size_t... Is>
         void build(std::index_sequence<Is...>) {
 
-            if (options.check_all_same_dtype) {
+            if (config_.check_all_same_dtype_) {
                 check_all_same_dtype();
             }
 
-            shape_ = compute_common_shape(std::make_index_sequence<sizeof...(Is)>{});
+            if (config_.check_all_same_shape_) {
+                (check_all_sanme_shape<Is>(), ...);
+            }
 
-            if (options.no_broadcast) {
-                (check_no_broadcast<Is + 1>(), ...);
+            if (ScalarTypesSize > 1) shape_ = compute_common_shape(std::make_index_sequence<2>{});
+
+            if (config_.resize_outputs_) {
+                if (!shape_.empty() && get_tensor<OptPutIndex>().get_shape().dims() != shape_) {
+                    auto new_shape = Shape(std::vector(shape_.begin(), shape_.end()));
+                    get_tensor<OptPutIndex>().set_initial_shape(new_shape);
+                }
             }
 
             (expand_strides_for_operand<Is>(), ...);
-
             (calc_strides_for_operand<Is>(), ...);
 
-            if (!shape_.empty() && get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims() != shape_) {
-                auto new_shape = Shape(std::vector(shape_.begin(), shape_.end()));
-                get_tensor<sizeof...(ScalarTypes) - 1>().set_initial_shape(new_shape);
+            if (config_.enforce_safe_casting_to_output_) {
+                check_safe_to_output();
             }
 
-            operands_.emplace_back(static_cast<OutputScalarType*>(get_tensor<sizeof...(ScalarTypes) - 1>().mutable_data()),
-                get_tensor<sizeof...(ScalarTypes) - 1>().get_strides(), get_tensor<sizeof...(ScalarTypes) - 1>().get_offset(), true, true);
-            operands_[sizeof ...(ScalarTypes)-1].strides_bytes =
-                calc_strides_bytes(operands_[sizeof ...(ScalarTypes)-1].ScalarType, operands_[sizeof ...(ScalarTypes)-1].strides);
-
             if (shape_.empty()) {
-                shape_ = std::vector<index_t>(get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims().begin(),
-                get_tensor<sizeof...(ScalarTypes) - 1>().get_shape().dims().end());
+                shape_ = std::vector<index_t>(get_tensor<OptPutIndex>().get_shape().dims().begin(),
+                get_tensor<OptPutIndex>().get_shape().dims().end());
             }
 
             is_contiguous_ = true;
@@ -228,17 +212,27 @@ namespace Breeze {
         }
 
     private:
-        std::vector<OperandInfo> operands_;
+        std::array<OperandInfo, sizeof ...(ScalarTypes)> operands_ ;
         std::tuple<Tensor<ScalarTypes>*...> tensors_;
         std::vector<index_t> shape_{};
         bool is_contiguous_{};
         bool is_inner_contiguous_{};
         size_t common_dim_{};
-        Options options;
+        TensorIteratorConfig config_{};
 
         template<size_t I>
         auto& get_tensor() {
             return *std::get<I>(tensors_);
+        }
+
+        template<size_t I>
+        [[nodiscard]] index_t calculate_data_size() const {
+            index_t size = 1;
+            const auto& op = get_operand<I>();
+            for (size_t i = 0; i < shape_.size(); ++i) {
+                size += (shape_[i] - 1) * op.strides[i];
+            }
+            return size;
         }
 
         template<typename Func>
@@ -257,8 +251,8 @@ namespace Breeze {
         template<typename Func>
         void inner_contiguous_for_each(Func& func) {
             std::vector<index_t> counter(shape_.size() - 1, 0);
-            std::vector<void*> data_ptrs(operands_.size());
-            std::vector<index_t> data_strides(operands_.size());
+            std::array<char*, ScalarTypesSize> data_ptrs;
+            std::array<index_t, ScalarTypesSize> data_strides;
             const index_t inner_dim = shape_.back();
             const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
 
@@ -271,7 +265,7 @@ namespace Breeze {
                 const index_t end = std::min(i + GRAIN_SIZE, outer_dim);
                 index_to_counter(i, counter);
                 for (index_t j = i; j < end; ++j) {
-                    for (size_t op = 0; op < operands_.size(); ++op) {
+                    for (size_t op = 0; op < ScalarTypesSize; ++op) {
                         data_ptrs[op] = operands_[op].data + ResultTypeSize * operands_[op].begin_offset +
                             compute_offset(counter, operands_[op].strides_bytes);
                         data_strides[op] = 1;
@@ -285,8 +279,8 @@ namespace Breeze {
         template<typename Func>
         void strided_for_each(Func& func) {
             std::vector<index_t> counter(shape_.size(), 0);
-            std::vector<void*> data_ptrs(operands_.size());
-            std::vector<index_t> data_strides(operands_.size());
+            std::array<char*, ScalarTypesSize> data_ptrs;
+            std::array<index_t, ScalarTypesSize> data_strides;
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
             #pragma omp parallel for default(none) \
                 shared(numel, func, operands_, shape_) \
@@ -298,7 +292,7 @@ namespace Breeze {
                     const index_t end = std::min(i + GRAIN_SIZE, numel);
                     index_to_counter(i, counter);
                     for (index_t j = i; j < end; ++j) {
-                        for (size_t op = 0; op < operands_.size(); ++op) {
+                        for (size_t op = 0; op < ScalarTypesSize; ++op) {
                             data_ptrs[op] =  operands_[op].data + operands_[op].begin_offset * ResultTypeSize +
                                 compute_offset(counter, operands_[op].strides_bytes);
                             data_strides[op] = operands_[op].strides.back();
@@ -314,7 +308,7 @@ namespace Breeze {
         void contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
             std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
-            for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
+            for (size_t j = 0; j < ScalarTypesSize; ++j) {
                 data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize;
             }
             constexpr index_t grain_size = GRAIN_SIZE;
@@ -323,11 +317,11 @@ namespace Breeze {
             schedule(dynamic, 64)
             for (index_t i = 0; i < numel; i += grain_size) {
                 const index_t end = std::min(i + GRAIN_SIZE, numel);
-                std::array<char*, sizeof...(ScalarTypes)> local_ptrs = data_ptrs;
-                for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
+                std::array<char*, ScalarTypesSize> local_ptrs = data_ptrs;
+                for (size_t j = 0; j < ScalarTypesSize; ++j) {
                     local_ptrs[j] += i * ResultTypeSize;
                 }
-                char* output_ptr = local_ptrs[sizeof...(ScalarTypes) - 1];
+                char* output_ptr = local_ptrs[OptPutIndex];
                 op_loop(scalar_op, vector_op, local_ptrs, output_ptr, end - i);
             }
         }
@@ -336,8 +330,8 @@ namespace Breeze {
         void inner_contiguous_kernel_vec(ScalarOp& scalar_op, VectorOp& vector_op) {
             const index_t inner_dim = shape_.back();
             const index_t outer_dim = std::accumulate(shape_.begin(), shape_.end() - 1, 1LL, std::multiplies<>());
-            std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
-            for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
+            std::array<char*, ScalarTypesSize> data_ptrs;
+            for (size_t j = 0; j < ScalarTypesSize; ++j) {
                 data_ptrs[j] = operands_[j].data + operands_[j].begin_offset * ResultTypeSize;
             }
 
@@ -345,15 +339,15 @@ namespace Breeze {
             shared(outer_dim, scalar_op, vector_op, data_ptrs, shape_, inner_dim, operands_) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < outer_dim; ++i) {
-                std::array<char*, sizeof...(ScalarTypes)> local_ptrs = data_ptrs;
+                std::array<char*, ScalarTypesSize> local_ptrs = data_ptrs;
                 std::vector<index_t> counter(shape_.size() - 1, 0);
                 index_to_counter(i, counter);
 
-                for (size_t j = 0; j < sizeof...(ScalarTypes); ++j) {
-                    local_ptrs[j] +=compute_offset(counter, operands_[j].strides_bytes);
+                for (size_t j = 0; j < ScalarTypesSize; ++j) {
+                    local_ptrs[j] += compute_offset(counter, operands_[j].strides_bytes);
                 }
 
-                char* output_ptr = local_ptrs[sizeof...(ScalarTypes) - 1];
+                char* output_ptr = local_ptrs[OptPutIndex];
                 op_loop(scalar_op, vector_op, local_ptrs, output_ptr, inner_dim);
             }
         }
@@ -362,11 +356,10 @@ namespace Breeze {
         void strided_kernel_vec(ScalarOp& scalar_op) {
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
             constexpr index_t grain_size = GRAIN_SIZE;
-            std::array<char*, sizeof...(ScalarTypes)> data_ptrs;
-            constexpr size_t num_operands = sizeof...(ScalarTypes) - 1;
+            std::array<char*, ScalarTypesSize> data_ptrs;
 
             #pragma omp parallel for default(none) \
-            shared(numel, scalar_op, operands_, data_ptrs, grain_size, num_operands) \
+            shared(numel, scalar_op, operands_, data_ptrs, grain_size) \
             schedule(dynamic, 64)
             for (index_t i = 0; i < numel; i += grain_size) {
                 std::vector<index_t> counter(shape_.size(), 0);
@@ -379,8 +372,8 @@ namespace Breeze {
                             compute_offset(counter, operands_[k].strides_bytes);
                     }
 
-                    char* output_ptr = data_ptrs[sizeof...(ScalarTypes) - 1];
-                    scalar_loop_impl(scalar_op, data_ptrs, output_ptr, 1, 1, std::make_index_sequence<num_operands>{});
+                    char* output_ptr = data_ptrs[OptPutIndex];
+                    scalar_loop_impl(scalar_op, data_ptrs, output_ptr, 1, 1, std::make_index_sequence<ScalarTypesSize - 1>{});
                     increment_counter(counter);
                 }
             }
@@ -388,9 +381,9 @@ namespace Breeze {
 
         template<typename Func>
         void call_function(Func& func, const index_t start, const index_t end) {
-            std::vector<char*> data_ptrs(sizeof ...(ScalarTypes));
-            std::vector<index_t> data_strides(sizeof ...(ScalarTypes));
-            for (size_t i = 0; i < sizeof ...(ScalarTypes); ++i) {
+            std::array<char*, ScalarTypesSize> data_ptrs;
+            std::array<index_t, ScalarTypesSize> data_strides;
+            for (size_t i = 0; i < ScalarTypesSize; ++i) {
                 data_ptrs[i] = operands_[i].data +  start * operands_[i].strides_bytes.back() + operands_[i].begin_offset;
                 data_strides[i] = 1;
             }
@@ -398,9 +391,8 @@ namespace Breeze {
         }
 
         template<typename VectorOp, size_t... I>
-        static void vectorized_loop_impl(VectorOp& op, const std::array<char*, sizeof...(ScalarTypes)>& data_ptrs,
+        static void vectorized_loop_impl(VectorOp& op, const std::array<char*, ScalarTypesSize>& data_ptrs,
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
-            using ResultScalarType = typename last_type<ScalarTypes...>::type;
             for (index_t i = 0; i + simd_vector_size <= size; i += simd_vector_size) {
                 op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
                      Vectorized<ResultScalarType>::loadu(data_ptrs[I] + i * sizeof (ResultScalarType))...);
@@ -408,10 +400,9 @@ namespace Breeze {
         }
 
         template<typename ScalarOp, size_t... I>
-        static void scalar_loop_impl(ScalarOp& op, const std::array<char*, sizeof...(ScalarTypes)> &data_ptrs,
+        static void scalar_loop_impl(ScalarOp& op, const std::array<char*, ScalarTypesSize> &data_ptrs,
             char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
             const auto begin = size - size % simd_vector_size;
-            using ResultScalarType = typename last_type<ScalarTypes...>::type;
             for (index_t i = begin; i < size; i += 1) {
                 //这里 不同类型转换使用默认编译器规则
                 op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
@@ -421,11 +412,10 @@ namespace Breeze {
 
         template<typename ScalarOp, typename VectorOp>
         void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,
-            const std::array<char*, sizeof...(ScalarTypes)> &data_ptrs, char* output_ptr, const index_t size) {
-            using LastVectorized = Vectorized<OutputScalarType>;
-            constexpr size_t simd_vector_size = LastVectorized::size();
-            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
-            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< sizeof...(ScalarTypes)-1>{});
+            const std::array<char*, ScalarTypesSize> &data_ptrs, char* output_ptr, const index_t size) {
+            constexpr size_t simd_vector_size = Vectorized<OutputScalarType>::size();
+            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< ScalarTypesSize - 1>{});
+            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< ScalarTypesSize - 1>{});
         }
 
         void check_all_same_dtype() const{
@@ -437,8 +427,25 @@ namespace Breeze {
             }
         }
 
+        void check_safe_to_output() const {
+            check_safe_to_output(std::make_index_sequence<sizeof...(ScalarTypes)>{});
+        }
+
+        template<size_t... Indices>
+        void check_safe_to_output(std::index_sequence<Indices...>) const {
+            constexpr size_t num_operands = sizeof...(ScalarTypes);
+            std::array<index_t, num_operands> data_size = {calculate_data_size<Indices>()...};
+            // 获取输出张量（最后一个操作数）的数据大小
+            const index_t output_size = data_size[num_operands - 1];
+            // 使用折叠表达式检查输出张量是否有足够的空间
+            if (const bool is_safe = ((Indices == num_operands - 1 || output_size >= data_size[Indices]) && ...);!is_safe) {
+                throw std::runtime_error("Output tensor does not have enough memory to store the result.");
+            }
+        }
+
         template<std::size_t I>
-        void check_no_broadcast() const{
+        void check_all_sanme_shape() const{
+            if (I==0) return;
             const auto first_shape = get_shape_from_tuple<0>();
             if (get_shape_from_tuple<I>() != first_shape) {
                     throw std::runtime_error("All tensors must have the same shape when no_broadcast is set.");
@@ -504,6 +511,12 @@ namespace Breeze {
             }
 
             return result;
+        }
+
+        // 辅助函数：获取特定索引的操作数
+        template<size_t I>
+        const auto& get_operand() const {
+            return std::get<I>(operands_);
         }
 
         static std::vector<index_t> broadcast_shapes(const std::vector<index_t>& a, const std::vector<index_t>& b) {

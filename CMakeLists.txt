@@ -112,6 +112,8 @@ set(HEADERS
         src/platform/SIMDFactory.h
         ${SIMD_HEADERS}
         src/ScalarType.h
+        src/TensorIteratorConfig.cpp
+        src/TensorIteratorConfig.h
 )
 
 # Add executable

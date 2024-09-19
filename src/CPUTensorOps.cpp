@@ -8,7 +8,7 @@
 namespace Breeze {
     template<typename ScalarT, index_t VecSize>
     struct ArangeIndices {
-        static constexpr std::array<ScalarT, VecSize> values = [](){
+        static constexpr std::array<ScalarT, VecSize> values = []{
             std::array<ScalarT, VecSize> arr{};
             for (int i = 0; i < VecSize; ++i) {
                 arr[i] = static_cast<ScalarT>(i);
@@ -337,7 +337,10 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     void CPUTensorOps<ScalarTypes...>::add_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
-        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        const TensorIteratorConfig config = TensorIteratorConfig()
+            .set_resize_outputs(false)
+            .set_enforce_safe_casting_to_output(true);
+        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b, config);
         iter.cpu_kernel_vec(
             [](ScalarT1 *out_ptr, ScalarT1 a_value) {
                 *out_ptr = *out_ptr + a_value;

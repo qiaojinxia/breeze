@@ -36,6 +36,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const override;
+
         void operator+=(const TensorBase& rhs) override;
         void operator-=(const TensorBase& rhs) override;
         void operator*=(const TensorBase& rhs) override;
