@@ -158,6 +158,9 @@ namespace Breeze {
                 if (!shape_.empty() && get_tensor<OptPutIndex>().get_shape().dims() != shape_) {
                     auto new_shape = Shape(std::vector(shape_.begin(), shape_.end()));
                     get_tensor<OptPutIndex>().set_initial_shape(new_shape);
+                    operands_[OptPutIndex] = OperandInfo(const_cast<OutputScalarType*>(get_tensor<OptPutIndex>().mutable_data()),
+                        get_tensor<OptPutIndex>().get_strides(),
+                        get_tensor<OptPutIndex>().get_offset(), true, true);
                 }
             }
 
@@ -393,7 +396,7 @@ namespace Breeze {
         template<typename VectorOp, size_t... I>
         static void vectorized_loop_impl(VectorOp& op, const std::array<char*, ScalarTypesSize>& data_ptrs,
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
-            for (index_t i = 0; i + simd_vector_size <= size; i += simd_vector_size) {
+            for (index_t i = 0; i <= size - simd_vector_size; i += simd_vector_size) {
                 op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
                      Vectorized<ResultScalarType>::loadu(data_ptrs[I] + i * sizeof (ResultScalarType))...);
             }
@@ -414,8 +417,8 @@ namespace Breeze {
         void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,
             const std::array<char*, ScalarTypesSize> &data_ptrs, char* output_ptr, const index_t size) {
             constexpr size_t simd_vector_size = Vectorized<OutputScalarType>::size();
-            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< ScalarTypesSize - 1>{});
-            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence< ScalarTypesSize - 1>{});
+            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence<ScalarTypesSize - 1>{});
+            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, simd_vector_size, std::make_index_sequence<ScalarTypesSize - 1>{});
         }
 
         void check_all_same_dtype() const{
