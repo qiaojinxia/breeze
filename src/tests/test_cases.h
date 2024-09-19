@@ -1335,11 +1335,10 @@ public:
         }
     }
 
-
     static void test_OP() {
         {
-            const Tensor<float> *a = new CPUTensor<float>({1000, 1000, 1000},1);
-            const Tensor<float> *b = new CPUTensor<float>({1000, 1000, 1000},4);
+            const Tensor<float> *a = new CPUTensor<float>({100, 1000, 1000},1);
+            const Tensor<float> *b = new CPUTensor<float>({100, 1000, 1000},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);

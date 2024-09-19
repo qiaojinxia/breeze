@@ -55,7 +55,6 @@ namespace Breeze {
             ScalarType ScalarType{};
 
             OperandInfo()= default;
-
             template <typename T>
             OperandInfo(T* data, const std::vector<index_t>& strides, const index_t offset,
                 const bool is_output, const bool is_read_write)
@@ -398,7 +397,7 @@ namespace Breeze {
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
             for (index_t i = 0; i <= size - simd_vector_size; i += simd_vector_size) {
                 op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
-                     Vectorized<ResultScalarType>::loadu(data_ptrs[I] + i * sizeof (ResultScalarType))...);
+                     Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(data_ptrs[I]) + i)...);
             }
         }
 
