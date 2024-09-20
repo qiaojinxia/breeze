@@ -132,7 +132,7 @@ namespace Breeze {
 
         template <std::size_t I>
         void expand_strides_for_operand() {
-            operands_[I].strides = expand_strides(get_shape_from_tuple<I>(), operands_[I].strides, shape_);
+            operands_[I].strides = Utils::expand_strides(get_shape_from_tuple<I>(), shape_, operands_[I].strides);
         }
 
         template <std::size_t I>
@@ -346,7 +346,7 @@ namespace Breeze {
                 index_to_counter(i, counter);
 
                 for (size_t j = 0; j < ScalarTypesSize; ++j) {
-                    local_ptrs[j] += compute_offset(counter, operands_[j].strides_bytes);
+                    local_ptrs[j] += Utils::compute_offset(counter, operands_[j].strides_bytes);
                 }
 
                 char* output_ptr = local_ptrs[OptPutIndex];
@@ -371,9 +371,8 @@ namespace Breeze {
                 for (index_t j = i; j < end; ++j) {
                     for (size_t k = 0; k < data_ptrs.size(); ++k) {
                         data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * ResultTypeSize +
-                            compute_offset(counter, operands_[k].strides_bytes);
+                            Utils::compute_offset(counter, operands_[k].strides_bytes);
                     }
-
                     char* output_ptr = data_ptrs[OptPutIndex];
                     scalar_loop_impl(scalar_op, data_ptrs, output_ptr, 1, 1, std::make_index_sequence<ScalarTypesSize - 1>{});
                     increment_counter(counter);
@@ -395,9 +394,19 @@ namespace Breeze {
         template<typename VectorOp, size_t... I>
         static void vectorized_loop_impl(VectorOp& op, const std::array<char*, ScalarTypesSize>& data_ptrs,
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<I...>) {
+
+            constexpr index_t cache_line_size = 64; // 缓存行大小为64字节
+            constexpr index_t prefetch_elements = cache_line_size / sizeof(ResultScalarType); // 以元素数量计的预读取数量
+
             for (index_t i = 0; i <= size - simd_vector_size; i += simd_vector_size) {
+                // 执行向量化操作
                 op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
-                     Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(data_ptrs[I]) + i)...);
+                   Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(data_ptrs[I]) + i)...);
+                // 每处理 prefetch_elements 个向量后进行一次预读取
+                if (i % prefetch_elements == 0 && i < size - prefetch_elements) {
+                    Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(output_ptr) + i + prefetch_elements);
+                    (Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(data_ptrs[I]) + i + prefetch_elements), ...);
+                }
             }
         }
 
@@ -481,63 +490,11 @@ namespace Breeze {
             return true;
         }
 
-        static std::vector<index_t> expand_strides(const std::vector<index_t>& input_shape,
-                                           const std::vector<index_t>& strides,
-                                           const std::vector<index_t>& output_shape) {
-            if (output_shape.empty()) {
-                return strides;
-            }
-            std::vector<index_t> result(output_shape.size(), 0);
-            const size_t offset = output_shape.size() - input_shape.size();
-            for (size_t i = 0; i < input_shape.size(); ++i) {
-                if (i < strides.size()) {
-                    if (input_shape[i] == output_shape[i + offset]) {
-                        result[i + offset] = strides[i];
-                    } else if (input_shape[i] == 1) {
-                        // 处理广播情况
-                        result[i + offset] = 0;
-                    }
-                } else {
-                    // 如果 strides 比 input_shape 短，用默认值填充
-                    result[i + offset] = (input_shape[i] == output_shape[i + offset]) ? 1 : 0;
-                }
-            }
-            // 处理前面的维度（可能是因为广播而新增的维度）
-            for (size_t i = 0; i < offset; ++i) {
-                result[i] = 0;  // 新增的维度的stride为0
-            }
-
-            // 确保至少有一个非零stride
-            if (std::all_of(result.begin(), result.end(), [](const index_t x) { return x == 0; })) {
-                result.back() = 1;
-            }
-
-            return result;
-        }
 
         // 辅助函数：获取特定索引的操作数
         template<size_t I>
         const auto& get_operand() const {
             return std::get<I>(operands_);
-        }
-
-        static std::vector<index_t> broadcast_shapes(const std::vector<index_t>& a, const std::vector<index_t>& b) {
-            std::vector<index_t> result(std::max(a.size(), b.size()));
-            auto it_a = a.rbegin();
-            auto it_b = b.rbegin();
-            auto it_result = result.rbegin();
-            while (it_a != a.rend() || it_b != b.rend()) {
-                index_t dim_a = (it_a != a.rend()) ? *it_a : 1;
-                index_t dim_b = (it_b != b.rend()) ? *it_b : 1;
-                if (dim_a != dim_b && dim_a != 1 && dim_b != 1) {
-                    throw std::runtime_error("Incompatible shapes for broadcasting");
-                }
-                *it_result = std::max(dim_a, dim_b);
-                if (it_a != a.rend()) ++it_a;
-                if (it_b != b.rend()) ++it_b;
-                ++it_result;
-            }
-            return result;
         }
 
         template<std::size_t... Is>
@@ -547,17 +504,10 @@ namespace Breeze {
             } else if constexpr (sizeof...(Is) == 1) {
                 return get_shape_from_tuple<0>();
             } else {
-                return broadcast_shapes(get_shape_from_tuple<Is>()...);
+                return Utils::broadcast_shapes(get_shape_from_tuple<Is>()...);
             }
         }
 
-        [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides_bytes) {
-            index_t offset = 0;
-            for (size_t i = 0; i < counter.size(); ++i) {
-                offset += counter[i] * strides_bytes[i];
-            }
-            return offset;
-        }
     };
 }
 

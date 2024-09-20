@@ -266,7 +266,7 @@ namespace Breeze {
 
         // Calculate the broadcast shape
         auto [a_strides, b_strides, result_shape] =
-            Utils::calc_broadcast_shape(a_shape, b_shape, true);
+            Utils::calc_matmul_shape(a_shape, b_shape);
 
         // Allocate result tensor
         auto result = std::make_shared<CPUTensor<ResultT>>(Shape{result_shape});

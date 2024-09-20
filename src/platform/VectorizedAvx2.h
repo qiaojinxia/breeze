@@ -55,6 +55,10 @@ namespace Breeze {
             return Vectorized(Sleef_atanf8_u10avx2(values));
         }
 
+        static void prefetch(const float* ptr) {
+            __builtin_prefetch(ptr, 0, 3);
+        }
+
         [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {
             const __m256 vec_two_pi = _mm256_set1_ps(2.0f * M_PI);
             const __m256 vec_minus_two = _mm256_set1_ps(-2.0f);
@@ -124,6 +128,10 @@ namespace Breeze {
 
         [[nodiscard]] Vectorized atan() const {
             return Vectorized(Sleef_atand4_u10avx2(values));
+        }
+
+        static void prefetch(const double* ptr) {
+            __builtin_prefetch(ptr, 0, 3);
         }
 
         [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {

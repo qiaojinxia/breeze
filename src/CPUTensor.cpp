@@ -98,6 +98,7 @@ namespace Breeze {
     DEFINE_UNARY_OP(atan)
 
     DEFINE_BINARY_OP(pow, pow)
+    DEFINE_BINARY_OP(matmul, matmul)
     DEFINE_BINARY_OP(operator+, add)
     DEFINE_BINARY_OP(operator-, subtract)
     DEFINE_BINARY_OP(operator*, multiply)
@@ -492,10 +493,11 @@ namespace Breeze {
         std::vector<index_t> new_shape;
         std::vector<index_t> new_strides;
         index_t flattened_size = 1;
+        const index_t after_flatten_size = original_ndim - end_dim + start_dim;
 
         // 保留 start_dim 之前的维度
-        new_shape.reserve(start_dim);
-        new_strides.reserve(start_dim);
+        new_shape.reserve(after_flatten_size);
+        new_strides.reserve(after_flatten_size);
 
         for (index_t i = 0; i < start_dim; ++i) {
             new_shape.push_back(original_shape[i]);
@@ -518,7 +520,6 @@ namespace Breeze {
 
         // 判断需要合并的维度里面有没有非连续的
         if (this->is_contiguous_in_range(start_dim, end_dim)) {
-            new_strides = Utils::compute_strides_with_origin(new_shape, new_strides);
             return std::make_shared<CPUTensor>(memory_block_, this->offset_, std::move(new_shape), std::move(new_strides));
         }
 
@@ -857,7 +858,6 @@ namespace Breeze {
             throw std::invalid_argument("invalid range");
         }
         const auto size = static_cast<index_t>(std::ceil((end - start) / step));
-
         auto tensor = vector(size);
         CPUTensorOps<ScalarType>::getInstance().arange(*tensor, start, step);
         return tensor;

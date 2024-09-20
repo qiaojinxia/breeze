@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <cassert>
 #include <vector>
 #include <limits>
 #include <stdexcept>
@@ -9,6 +10,8 @@
 #include <tuple>
 #include <iostream>
 #include <cstdarg>
+#include <valarray>
+
 #include "Macro.h"
 class Utils {
 public:
@@ -128,39 +131,25 @@ public:
     }
 
     static std::tuple<std::vector<index_t>, std::vector<index_t>, std::vector<index_t>>
-    calc_broadcast_shape(const std::vector<index_t>& shape1, const std::vector<index_t>& shape2, const bool matmul) {
+    calc_matmul_shape(const std::vector<index_t>& shape1, const std::vector<index_t>& shape2) {
         // 计算目标形状
         std::vector<index_t> targetShape;
         const int32_t maxDims = static_cast<int32_t>(std::max(shape1.size(), shape2.size()));
         targetShape.resize(maxDims);
-        if (matmul) {
-            // 特殊处理矩阵乘法的情况
-            if (shape1.size() < 2 || shape2.size() < 2) {
-                throw std::runtime_error("For matmul, both shapes must have at least 2 dimensions");
-            }
-            // 处理除最后两个维度之外的部分
-            for (int32_t i = 0; i < maxDims - 2; ++i) {
-                const index_t dim1 = i < static_cast<int32_t>(shape1.size()) - 2 ? shape1[i] : 1;
-                const index_t dim2 = i < static_cast<int32_t>(shape2.size()) - 2 ? shape2[i] : 1;
-                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
-                    throw std::runtime_error("Incompatible shapes for broadcasting in matmul");
-                }
-                targetShape[i] = std::max(dim1, dim2);
-            }
 
-            // 处理最后两个维度
-            targetShape[maxDims - 2] = shape1[shape1.size() - 2];
-            targetShape[maxDims - 1] = shape2[shape2.size() - 1];
-        } else {
-            for (int32_t i = 0; i < maxDims; ++i) {
-                const index_t dim1 = i < static_cast<int32_t>(shape1.size()) ? shape1[shape1.size() - 1 - i] : 1;
-                const index_t dim2 = i < static_cast<int32_t>(shape2.size()) ? shape2[shape2.size() - 1 - i] : 1;
-                if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
-                    throw std::runtime_error("Incompatible shapes for broadcasting");
-                }
-                targetShape[maxDims - 1 - i] = std::max(dim1, dim2);
+        // 处理除最后两个维度之外的部分
+        for (int32_t i = 0; i < maxDims - 2; ++i) {
+            const index_t dim1 = i < static_cast<int32_t>(shape1.size()) - 2 ? shape1[i] : 1;
+            const index_t dim2 = i < static_cast<int32_t>(shape2.size()) - 2 ? shape2[i] : 1;
+            if (dim1 != dim2 && dim1 != 1 && dim2 != 1) {
+                throw std::runtime_error("Incompatible shapes for broadcasting in matmul");
             }
+            targetShape[i] = std::max(dim1, dim2);
         }
+
+        // 处理最后两个维度
+        targetShape[maxDims - 2] = shape1[shape1.size() - 2];
+        targetShape[maxDims - 1] = shape2[shape2.size() - 1];
 
         // 计算输入向量的步长
         std::vector<index_t> strides1(maxDims, 0), strides2(maxDims, 0);
@@ -178,6 +167,63 @@ public:
         return {strides1, strides2, targetShape};
     }
 
+    static std::vector<index_t> expand_strides(const std::vector<index_t>& input_shape,
+        const std::vector<index_t>& output_shape, const std::vector<index_t>& strides) {
+        if (output_shape.empty()) {
+            return strides;
+        }
+        std::vector<index_t> result(output_shape.size(), 0);
+        const size_t offset = output_shape.size() - input_shape.size();
+        for (size_t i = 0; i < input_shape.size(); ++i) {
+            if (i < strides.size()) {
+                if (input_shape[i] == output_shape[i + offset]) {
+                    result[i + offset] = strides[i];
+                } else if (input_shape[i] == 1) {
+                    // 如果 原先形状为1 与原先不想等 处理广播情况
+                    result[i + offset] = 0;
+                }
+            } else {
+                // 如果 strides 比 input_shape 短，用默认值填充
+                result[i + offset] = (input_shape[i] == output_shape[i + offset]) ? 1 : 0;
+            }
+        }
+        // 处理前面的维度（可能是因为广播而新增的维度）
+        for (size_t i = 0; i < offset; ++i) {
+            result[i] = 0;  // 新增的维度的stride为0
+        }
+        // 确保至少有一个非零stride
+        if (std::all_of(result.begin(), result.end(), [](const index_t x) { return x == 0; })) {
+            result.back() = 1;
+        }
+        return result;
+    }
+
+    [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides_bytes) {
+        index_t offset = 0;
+        for (size_t i = 0; i < counter.size(); ++i) {
+            offset += counter[i] * strides_bytes[i];
+        }
+        return offset;
+    }
+
+    static std::vector<index_t> broadcast_shapes(const std::vector<index_t>& a, const std::vector<index_t>& b) {
+        std::vector<index_t> result(std::max(a.size(), b.size()));
+        auto it_a = a.rbegin();
+        auto it_b = b.rbegin();
+        auto it_result = result.rbegin();
+        while (it_a != a.rend() || it_b != b.rend()) {
+            index_t dim_a = (it_a != a.rend()) ? *it_a : 1;
+            index_t dim_b = (it_b != b.rend()) ? *it_b : 1;
+            if (dim_a != dim_b && dim_a != 1 && dim_b != 1) {
+                throw std::runtime_error("Incompatible shapes for broadcasting");
+            }
+            *it_result = std::max(dim_a, dim_b);
+            if (it_a != a.rend()) ++it_a;
+            if (it_b != b.rend()) ++it_b;
+            ++it_result;
+        }
+        return result;
+    }
 };
 
 #endif //UTILS_H

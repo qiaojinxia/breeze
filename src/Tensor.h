@@ -29,6 +29,7 @@ public:
     [[nodiscard]] virtual std::shared_ptr<TensorBase> atan() const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> pow(const TensorBase& other) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const = 0;
     [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const = 0;

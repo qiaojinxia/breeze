@@ -31,6 +31,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> tan() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> atan() const override;
 
+        [[nodiscard]] std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> pow(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const override;
