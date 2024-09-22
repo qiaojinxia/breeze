@@ -945,7 +945,6 @@ public:
             COMPARE_TENSOR_DATA(flattened->mutable_data(), expected, 0);
         }
 
-
         // 测试非连续张量
         {
             const auto t3d = CPUTensor<float>::arange(0, 24, 1.0)->view({2, 3, 4});
@@ -1345,9 +1344,8 @@ public:
 
     static void test_OP() {
         {
-            const Tensor<float> *a = new CPUTensor<float>({7000, 1, 484},1);
-            const Tensor<float> *b = new CPUTensor<float>({7000, 484, 256},4);
-
+            const Tensor<float> *a = new CPUTensor<float>({100, 1000, 1000},1);
+            const Tensor<float> *b = new CPUTensor<float>({100, 1000, 1000},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
@@ -1358,8 +1356,7 @@ public:
             // *a += *b;
             // std::cout << *a << std::endl;
             // std::cout << *b << std::endl;
-
-            MEASURE_TIME(a->matmul(*b));
+            MEASURE_TIME(*a + *b);
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
 

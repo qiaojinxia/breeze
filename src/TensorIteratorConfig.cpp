@@ -19,6 +19,16 @@ namespace Breeze {
         return *this;
     }
 
+    TensorIteratorConfig & TensorIteratorConfig::set_reduce_dims(std::vector<index_t> &reduce_dims) {
+        reduce_dims_ = std::move(reduce_dims);
+        return *this;
+    }
+
+    TensorIteratorConfig & TensorIteratorConfig::set_keep_keepdim(const bool keepdim) {
+        keep_keepdim_ = keepdim;
+        return *this;
+    }
+
     TensorIteratorConfig& TensorIteratorConfig::set_check_all_same_dtype(const bool check_all_same_dtype) {
         check_all_same_dtype_ = check_all_same_dtype;
         return *this;

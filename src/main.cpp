@@ -6,6 +6,7 @@
 
 using namespace Breeze;
 int main() {
+
     #pragma omp parallel
     {
         std::stringstream ss;

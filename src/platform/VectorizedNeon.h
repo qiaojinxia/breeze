@@ -25,6 +25,10 @@ namespace Breeze {
         explicit Vectorized(const float v) : values(vdupq_n_f32(v)) {}
         explicit Vectorized(const float32x4_t v) : values(v) {}
 
+        static void prefetch(const float* ptr) {
+            asm volatile("prfm pldl1keep, [%0]" : : "r" (ptr));
+        }
+
         Vectorized operator+(const Vectorized& other) const {
             return Vectorized(vaddq_f32(values, other.values));
         }
@@ -78,7 +82,6 @@ namespace Breeze {
         static Vectorized loadu(const float* ptr) {
             return Vectorized(vld1q_f32(ptr));
         }
-
 
         void store(float* ptr) const {
             vst1q_f32(ptr, values);
@@ -150,6 +153,10 @@ namespace Breeze {
 
         static Vectorized loadu(const double* ptr) {
             return Vectorized(vld1q_f64(ptr));
+        }
+
+        static void prefetch(const double* ptr) {
+            asm volatile("prfm pldl1keep, [%0]" : : "r" (ptr));
         }
 
         void store(double* ptr) const {

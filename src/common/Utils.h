@@ -224,6 +224,23 @@ public:
         }
         return result;
     }
+    static void merge_counters(const std::vector<index_t>& non_reduce_counter,
+                    const std::vector<index_t>& reduce_counter,
+                    const std::vector<bool>& is_reduce_dim,
+                    std::vector<index_t>& full_counter) {
+        full_counter.clear();
+        size_t non_reduce_idx = 0;
+        size_t reduce_idx = 0;
+        for (const bool is_reduce : is_reduce_dim) {
+            if (is_reduce) {
+                full_counter.push_back(reduce_counter[reduce_idx++]);
+            } else {
+                full_counter.push_back(non_reduce_counter[non_reduce_idx++]);
+            }
+        }
+    }
+
+
 };
 
 #endif //UTILS_H

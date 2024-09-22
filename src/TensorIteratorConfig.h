@@ -1,5 +1,8 @@
 #ifndef TENSORITERATORCONFIG_H
 #define TENSORITERATORCONFIG_H
+#include <vector>
+
+#include "common/Macro.h"
 
 namespace Breeze {
 
@@ -12,6 +15,8 @@ namespace Breeze {
         TensorIteratorConfig& set_resize_outputs(bool resize_outputs);
         TensorIteratorConfig& set_check_all_same_dtype(bool check_all_same_dtype);
         TensorIteratorConfig& set_check_all_same_shape(bool check_all_same_shape);
+        TensorIteratorConfig& set_reduce_dims(std::vector<index_t>& reduce_dims);
+        TensorIteratorConfig& set_keep_keepdim(bool keepdim);
 
         template<typename... ScalarTypes>
         TensorIterator<ScalarTypes...> build() const {
@@ -28,6 +33,10 @@ namespace Breeze {
         bool check_all_same_shape_ = false;
         bool resize_outputs_ = false;
         bool check_all_same_dtype_ = false;
+        std::vector<index_t> reduce_dims_ = {};
+        bool keep_keepdim_ = false;
+        bool is_reduction_ = false;
+        bool enforce_linear_iteration_ = false;
     };
 
 }
