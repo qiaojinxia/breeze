@@ -403,8 +403,7 @@ namespace Breeze {
             }
             auto check_contiguous = [this, dim0, dim1](const auto& op) {
                 const auto& strides = op.strides;
-                auto a =  shape_[dim0] * strides[dim0] == strides[dim1];
-                return a;
+                return shape_[dim0] * strides[dim0] == strides[dim1];
             };
             if (!(check_contiguous(get_operand<Indices>()) && ...)) {
                 return false;
@@ -523,6 +522,7 @@ namespace Breeze {
             // 计算出 perm_ 后对 strides 重排
             permute_dimensions(perm_);
         }
+
 
         template<typename Func>
         void reduce_strided_for_each(Func& reduce_func) {

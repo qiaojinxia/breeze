@@ -1344,8 +1344,8 @@ public:
 
     static void test_OP() {
         {
-            const Tensor<float> *a = new CPUTensor<float>({100, 1000, 1000},1);
-            const Tensor<float> *b = new CPUTensor<float>({100, 1000, 1000},4);
+            const Tensor<float> *a = new CPUTensor<float>({1000, 1000, 1000},1);
+            const Tensor<float> *b = new CPUTensor<float>({1000, 1000, 1000},4);
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
@@ -1356,7 +1356,7 @@ public:
             // *a += *b;
             // std::cout << *a << std::endl;
             // std::cout << *b << std::endl;
-            MEASURE_TIME(*a + *b);
+            // MEASURE_TIME(*a + *b);
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);
             // const auto b = CPUTensor<float>({2, 1, 4, 3},4);
 
@@ -1368,9 +1368,10 @@ public:
             // }
             // // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
-            // MEASURE_TIME(*a + *b);
+            MEASURE_TIME(*a + *b);
             // std::cout << *a->cos() << std::endl;
-            // const auto c = b + a;
+            // const auto c = *a + *b;
+            // std::cout << *c << std::endl;
             // MEASURE_TIME(*a->sin());
             // std::cout << *a->cos()->sin() << std::endl;
         }

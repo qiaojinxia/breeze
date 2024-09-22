@@ -33,7 +33,7 @@ endif()
 
 # Set compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-#    add_compile_options(-Wall -Wextra -O3)
+    add_compile_options(-Wall -Wextra -O3)
     if(IS_X86_64)
         add_compile_options(-mavx2)
     endif()
