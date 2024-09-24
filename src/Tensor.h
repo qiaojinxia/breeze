@@ -40,7 +40,8 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<TensorBase> flatten() = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> flatten(index_t start_dim, index_t end_dim) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> repeat(const std::vector<index_t>& repeats) const = 0;
-
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> clone() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> contiguous() = 0;
 
         virtual void print(std::ostream& os) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> sin() const = 0;
@@ -98,8 +99,7 @@ namespace Breeze {
         [[nodiscard]] virtual index_t align_size() const = 0;
         virtual void set_initial_shape(Shape& shape) = 0;
 
-        [[nodiscard]] virtual std::shared_ptr<Tensor> clone() const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor> contiguous() = 0;
+
         [[nodiscard]] virtual const ScalarType& at(const std::vector<index_t>& indices) const = 0;
         virtual void set_value(const std::vector<index_t>& indices, ScalarType value) = 0;
 
@@ -120,6 +120,10 @@ namespace Breeze {
         [[nodiscard]] index_t num_elements() const;
         [[nodiscard]] virtual index_t n_bytes() const = 0;
         static std::shared_ptr<Tensor> create_tensor(std::vector<index_t> shape,Device device = Device::CPU);
+        static std::shared_ptr<Tensor> create_tensor(std::vector<index_t> shape, ScalarType value,Device device = Device::CPU);
+        static std::shared_ptr<Tensor> arange(ScalarType start, ScalarType end, ScalarType step,  Device device= Device::CPU);
+        static std::shared_ptr<Tensor> vector(index_t size, Device device= Device::CPU);
+        static std::shared_ptr<Tensor> scalar(ScalarType value, Device device= Device::CPU);
     };
 
     template<typename ScalarType>
@@ -130,6 +134,45 @@ namespace Breeze {
             return nullptr;
         }
     }
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::create_tensor(std::vector<index_t> shape,
+        ScalarType value, const Device device) {
+        if (device == Device::CPU) {
+            return std::make_shared<CPUTensor<ScalarType>>(Shape(std::move(shape)), value);
+        } else {
+            return nullptr;
+        }
+    }
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::arange(ScalarType start, ScalarType end, ScalarType step, const Device device) {
+        if (device == Device::CPU) {
+            return CPUTensor<ScalarType>::arange(start, end, step);
+        } else {
+            return nullptr;
+        }
+    }
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::vector(const index_t size, const Device device) {
+        if (device == Device::CPU) {
+            return CPUTensor<ScalarType>::vector(size);
+        } else {
+            return nullptr;
+        }
+    }
+
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::scalar(ScalarType value, const Device device) {
+        if (device == Device::CPU) {
+            return CPUTensor<ScalarType>::scalar(value);
+        } else {
+            return nullptr;
+        }
+    }
+
 
     // Implementation part remains unchanged
     template<typename ScalarType>

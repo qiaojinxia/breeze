@@ -98,6 +98,9 @@ namespace Breeze {
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
+        if (const index_t ndim = this->shape.ndim(); ndim == 0){
+           return this->shared_from_this();
+        }
         for (auto dim: dims) {
             if (dim > this->shape.ndim() -1) {
                 T_ERROR("Dimension index is out of bounds.")
@@ -603,7 +606,7 @@ namespace Breeze {
     }
 
     template <typename ScalarType>
-    std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::contiguous() {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::contiguous() {
         // 如果已经是连续的，直接返回 this 的 shared_ptr
         if (this->is_contiguous()) {
             return this->shared_from_this();
@@ -613,7 +616,7 @@ namespace Breeze {
     }
 
     template <typename ScalarType>
-    std::shared_ptr<Tensor<ScalarType>> CPUTensor<ScalarType>::clone() const {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::clone() const {
         const index_t original_ndim = this->shape.ndim();
         const std::vector<index_t> original_shape = this->shape.dims();
         const std::vector<index_t>& original_strides = this->get_strides();

@@ -1347,10 +1347,11 @@ public:
         {
 
             // std::cout << *a << std::endl;
-            auto tensor = Tensor<float>::create_tensor({1000,1000,1000}, Device::CPU);
-
-            // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);
+            const auto tensor = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
             auto c = tensor->sum({0,1,2});
+            std::cout << *c << std::endl;
+            // MEASURE_TIME(tensor->sum({0,1,2}););
+            // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);
             // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
             // // MEASURE_TIME(a - b);
             // MEASURE_TIME(*a + *b);
@@ -1359,7 +1360,7 @@ public:
             // std::cout << *a << std::endl;
             // const auto b = CPUTensor<float>::randn({1, 1, 4});
             // *a += *b;
-            std::cout << *c << std::endl;
+            // std::cout << *c << std::endl;
             // std::cout << *b << std::endl;
             // MEASURE_TIME(*a + *b);
             // const auto a = CPUTensor<float>({2, 4, 1, 3},1);

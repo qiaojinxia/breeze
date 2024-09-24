@@ -67,8 +67,8 @@ namespace Breeze {
         [[nodiscard]] index_t align_size() const override;
         void set_initial_shape(Shape& shape) override;
 
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> clone() const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> contiguous() override;
+        [[nodiscard]] std::shared_ptr<TensorBase> clone() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> contiguous() override;
 
         [[nodiscard]] const ScalarType& at(const std::vector<index_t>& indices) const override;
         void set_value(const std::vector<index_t>& indices, ScalarType value) override;
