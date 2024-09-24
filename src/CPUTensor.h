@@ -31,6 +31,8 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> tan() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> atan() const override;
 
+        [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) override;
+
         [[nodiscard]] std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> pow(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const override;
@@ -43,18 +45,18 @@ namespace Breeze {
         void operator*=(const TensorBase& rhs) override;
         void operator/=(const TensorBase& rhs) override;
 
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> reshape(const std::vector<index_t>& new_shape) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> slice(const std::vector<std::string>& range_strings) override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> view(const std::vector<index_t>& new_shape) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> unsqueeze(index_t dim) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> squeeze(index_t dim) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> squeeze() const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> expand(const std::vector<index_t>& new_shape) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> transpose(index_t dim0, index_t dim1) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> permute(const std::vector<index_t>& dims) override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> flatten() override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> flatten(index_t start_dim, index_t end_dim) override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarType>> repeat(const std::vector<index_t>& repeats) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> reshape(const std::vector<index_t>& new_shape) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> slice(const std::vector<std::string>& range_strings) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> view(const std::vector<index_t>& new_shape) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> unsqueeze(index_t dim) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> squeeze(index_t dim) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> squeeze() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> expand(const std::vector<index_t>& new_shape) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> transpose(index_t dim0, index_t dim1) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> permute(const std::vector<index_t>& dims) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> flatten() override;
+        [[nodiscard]] std::shared_ptr<TensorBase> flatten(index_t start_dim, index_t end_dim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> repeat(const std::vector<index_t>& repeats) const override;
 
         static std::shared_ptr<CPUTensor> cat(const std::vector<Tensor<ScalarType>*>& tensors, index_t dim);
         static std::shared_ptr<CPUTensor> stack(const std::vector<Tensor<ScalarType>*>& tensors, index_t dim);

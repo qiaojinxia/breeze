@@ -29,6 +29,17 @@ namespace Breeze {
         return *this;
     }
 
+    TensorIteratorConfig & TensorIteratorConfig::set_check_mem_overlap(const bool check_mem_overla) {
+        check_mem_overlap_ = check_mem_overla;
+        return *this;
+    }
+
+    TensorIteratorConfig & TensorIteratorConfig::set_is_reduction(bool is_reduction) {
+        is_reduction_ = is_reduction;
+        return *this;
+    }
+
+
     TensorIteratorConfig& TensorIteratorConfig::set_check_all_same_dtype(const bool check_all_same_dtype) {
         check_all_same_dtype_ = check_all_same_dtype;
         return *this;

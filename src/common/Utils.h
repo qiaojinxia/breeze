@@ -178,8 +178,9 @@ public:
             if (i < strides.size()) {
                 if (input_shape[i] == output_shape[i + offset]) {
                     result[i + offset] = strides[i];
-                } else if (input_shape[i] == 1) {
-                    // 如果 原先形状为1 与原先不想等 处理广播情况
+                }else if (input_shape[i] == 1 || output_shape[i + offset] == -1 ) {
+                    // 如果 原先形状为1 与原先不想等 处理广播情况 如果输出形状设置成了-1
+                    // 在前面resize的时候 就认为是reduce维度也设置成01
                     result[i + offset] = 0;
                 }
             } else {
@@ -200,8 +201,9 @@ public:
 
     [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides_bytes) {
         index_t offset = 0;
+        const auto size_offset = strides_bytes.size() - counter.size();
         for (size_t i = 0; i < counter.size(); ++i) {
-            offset += counter[i] * strides_bytes[i];
+            offset += counter[i] * strides_bytes[i+ size_offset];
         }
         return offset;
     }
@@ -239,7 +241,12 @@ public:
             }
         }
     }
-
+    static void index_to_counter(index_t index, std::vector<index_t>& counter, const std::vector<index_t>& index_shape) {
+        for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
+            counter[i] = index % index_shape[i];
+            index /= index_shape[i];
+        }
+    }
 
 };
 

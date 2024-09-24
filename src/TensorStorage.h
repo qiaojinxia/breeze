@@ -20,6 +20,10 @@ namespace Breeze {
     template <typename ScalarType>
     class TensorStorage<ScalarType, CPUDevice> {
     public:
+        explicit TensorStorage()
+            : total_size_(0), padding_size_(0), data_(nullptr) {
+        }
+
         explicit TensorStorage(const index_t size)
             : total_size_(size), padding_size_(0), data_(nullptr) {
             allocate_memory();

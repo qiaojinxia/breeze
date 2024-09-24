@@ -17,7 +17,8 @@ namespace Breeze {
         TensorIteratorConfig& set_check_all_same_shape(bool check_all_same_shape);
         TensorIteratorConfig& set_reduce_dims(std::vector<index_t>& reduce_dims);
         TensorIteratorConfig& set_keep_keepdim(bool keepdim);
-
+        TensorIteratorConfig& set_check_mem_overlap(bool check_mem_overla);
+        TensorIteratorConfig& set_is_reduction(bool is_reduction);
         template<typename... ScalarTypes>
         TensorIterator<ScalarTypes...> build() const {
             return TensorIterator<ScalarTypes...>(*this);
@@ -37,6 +38,7 @@ namespace Breeze {
         bool keep_keepdim_ = false;
         bool is_reduction_ = false;
         bool enforce_linear_iteration_ = false;
+        bool check_mem_overlap_ = false;
     };
 
 }
