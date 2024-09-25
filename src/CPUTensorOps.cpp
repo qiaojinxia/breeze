@@ -94,12 +94,11 @@ namespace Breeze {
         Tensor<ScalarT1> &a, std::vector<index_t> &dims) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
-
         const TensorIteratorConfig config = TensorIteratorConfig()
         .set_resize_outputs(true)
         .set_reduce_dims(dims)
         .set_is_reduction(true)
-        .set_keep_keepdim(true);
+        .set_keep_keepdim(false);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
             [](ResultT a_value, ResultT b_value) {

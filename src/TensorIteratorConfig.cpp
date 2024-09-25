@@ -49,7 +49,7 @@ namespace Breeze {
         TensorIteratorConfig config;
         config
             .set_enforce_safe_casting_to_output(false)
-            .set_resize_outputs(true)
+            .set_resize_outputs(false)
             .set_check_all_same_shape(false)
             .set_check_all_same_dtype(false);
         return config;

@@ -68,6 +68,36 @@ typedef int8_t QInt8;
 
 #define T_ERROR(msg) throw std::runtime_error(std::string("Error: ") + (msg));
 
+#define BREEZE_ASSERT(cond, ...) \
+    do { \
+        if (!(cond)) { \
+            std::ostringstream oss; \
+            oss << "Assertion failed: " << #cond << "\n"; \
+            oss << "Error at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            oss << "In function: " << __func__ << "\n"; \
+            breeze_assert_print(oss, ##__VA_ARGS__); \
+            throw std::runtime_error(oss.str()); \
+        } \
+    } while (0)
+
+
+inline void breeze_assert_print(std::ostringstream& oss) {
+    // Base case: do nothing
+}
+
+template<typename T, typename... Args>
+void breeze_assert_print(std::ostringstream& oss, T&& first, Args&&... args) {
+    oss << std::forward<T>(first);
+    breeze_assert_print(oss, std::forward<Args>(args)...);
+}
+
+#ifdef NDEBUG
+#define BREEZE_ASSERT_DEBUG(cond, ...) ((void)0)
+#else
+#define BREEZE_ASSERT_DEBUG(cond, ...) BREEZE_ASSERT(cond, ##__VA_ARGS__)
+#endif
+
+
 #define COMPARE_TENSOR_DATA(tensor_data, expected, epsilon) \
 do { \
     size_t index = 0; \

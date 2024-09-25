@@ -98,6 +98,7 @@ namespace Breeze {
         virtual const ScalarType* data() const = 0;
         [[nodiscard]] virtual index_t align_size() const = 0;
         virtual void set_initial_shape(Shape& shape) = 0;
+        virtual void set_shape_and_strides(std::vector<index_t>& shape, std::vector<index_t>& strides, bool reduce) = 0;
 
 
         [[nodiscard]] virtual const ScalarType& at(const std::vector<index_t>& indices) const = 0;

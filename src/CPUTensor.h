@@ -66,6 +66,7 @@ namespace Breeze {
         [[nodiscard]] const ScalarType* data() const override;
         [[nodiscard]] index_t align_size() const override;
         void set_initial_shape(Shape& shape) override;
+        void set_shape_and_strides(std::vector<index_t>& shape, std::vector<index_t>& strides,bool reduce) override;
 
         [[nodiscard]] std::shared_ptr<TensorBase> clone() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> contiguous() override;

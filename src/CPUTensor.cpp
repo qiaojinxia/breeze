@@ -91,21 +91,55 @@ namespace Breeze {
         this->set_state(TensorState::ALLOCATED);
     }
 
+    template<typename ScalarType>
+    void CPUTensor<ScalarType>::set_shape_and_strides(std::vector<index_t>& shape,
+        std::vector<index_t>& strides,const bool reduce) {
+        // 计算新形状的总元素数量
+        // 获取当前张量的总元素数量
+        index_t current_total_size = this->shape.total_size();
+        if (!reduce) {
+            index_t new_total_size = std::accumulate(shape.begin(), shape.end(),
+                                                            static_cast<index_t>(1), std::multiplies<>());
+            if (shape.empty()) {
+                new_total_size = 1;
+            }
+            // 使用 BREEZE_ASSERT 检查新形状的总元素数量是否与当前张量的总元素数量相同
+            BREEZE_ASSERT(new_total_size == current_total_size,
+                          "View shape mismatch: new shape total size (", new_total_size,
+                          ") must be equal to current tensor total size (", current_total_size, ")");
+        }
+        if (!strides.empty())
+            this->strides_ = strides;
+        // 如果断言通过，更新形状
+        this->shape = Shape(std::move(shape));
+    }
+
     DEFINE_UNARY_OP(sin)
     DEFINE_UNARY_OP(cos)
     DEFINE_UNARY_OP(tan)
     DEFINE_UNARY_OP(atan)
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
-        if (const index_t ndim = this->shape.ndim(); ndim == 0){
-           return this->shared_from_this();
+   std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
+        const index_t ndim = this->shape.ndim();
+        // 检查张量是否为空
+        BREEZE_ASSERT(ndim > 0, "Cannot perform sum on an empty tensor.");
+        // 如果维度为空，则返回整个张量的和
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = this->get_shape().dims();
+            return CPUTensorOps<ScalarType>::getInstance().sum(*this, all_dim);
         }
-        for (auto dim: dims) {
-            if (dim > this->shape.ndim() -1) {
-                T_ERROR("Dimension index is out of bounds.")
-            }
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
         }
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the sum operation.");
+        // 执行求和操作
         return CPUTensorOps<ScalarType>::getInstance().sum(*this, dims);
     }
 

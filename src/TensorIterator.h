@@ -200,6 +200,43 @@ namespace Breeze {
             }
         }
 
+
+        void resize_output() {
+            BREEZE_ASSERT(config_.is_reduction_, "resize_output should only be called for reduction operations");
+
+            const size_t original_reduce_size = config_.reduce_dims_.size();
+            const size_t input_dims = shape_.size();
+            const size_t output_dims = input_dims - reduce_size;
+
+            BREEZE_ASSERT(input_dims >= reduce_size,
+                          "Invalid reduction: input dimensions (", input_dims,
+                          ") must be greater than or equal to reduce dimensions (", reduce_size, ")");
+
+            auto final_shape = std::vector<index_t>();
+            auto final_strides = std::vector<index_t>();
+            final_shape.reserve(output_dims);
+            final_strides.reserve(output_dims);
+
+            std::vector<index_t> original_shape = get_shape_from_tuple<0>();
+            std::vector<index_t> original_stides = get_tensor<0>().get_strides();
+
+            // 根据 perm_ 重新排列 final_shape 和 final_strides
+            for (size_t i = 0; i < original_shape.size(); ++i) {
+                if (auto it =
+                    std::find(perm_.begin() + original_reduce_size, perm_.end(), i); it!= perm_.end()) {
+                    final_shape.push_back(original_shape[i]);
+                    final_strides.push_back(get_tensor<OptPutIndex>().get_strides()[i]);
+                }
+            }
+
+            // 检查最终形状是否有效
+            BREEZE_ASSERT(std::all_of(final_shape.begin(), final_shape.end(), [](const index_t dim) { return dim > 0; }),
+                          "Invalid final shape: all dimensions must be positive");
+
+            // 更新输出张量的形状和步长
+            get_tensor<OptPutIndex>().set_shape_and_strides(final_shape, final_strides, true);
+        }
+
         template <std::size_t... Indices>
         void build(std::index_sequence<Indices...>) {
 
@@ -229,9 +266,9 @@ namespace Breeze {
                 check_safe_to_output(std::make_index_sequence<sizeof...(ScalarTypes)>{});
             }
 
-            // if (config_.resize_outputs_) {
-            //
-            // }
+            if (config_.resize_outputs_) {
+                resize_output();
+            }
 
             analysis_memory_layout();
 
@@ -258,6 +295,7 @@ namespace Breeze {
                 strided_kernel_vec(scalar_op);
             }
         }
+
 
         template<typename ReduceOp>
         void reduce_strided_for_each(ReduceOp reduce_op) {
@@ -308,6 +346,11 @@ namespace Breeze {
 
         template<size_t I>
         auto& get_tensor() const{
+            return *std::get<I>(tensors_);
+        }
+
+        template<size_t I>
+        auto& get_tensor(){
             return *std::get<I>(tensors_);
         }
 

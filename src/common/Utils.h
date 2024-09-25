@@ -226,6 +226,30 @@ public:
         }
         return result;
     }
+
+
+    template<typename IndexType>
+    IndexType compute_flat_index(const std::vector<IndexType>& indices,
+                             const std::vector<IndexType>& shape,
+                             const std::vector<IndexType>& strides) {
+        IndexType flat_index = 0;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            flat_index += indices[i] * strides[i];
+        }
+        return flat_index;
+    }
+
+    // 重载版本，使用 index_t 类型
+    static index_t compute_flat_index(const std::vector<index_t>& indices,
+                                     const std::vector<index_t>& shape,
+                                     const std::vector<index_t>& strides) {
+        index_t flat_index = 0;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            flat_index += indices[i] * strides[i];
+        }
+        return flat_index;
+    }
+
     static void merge_counters(const std::vector<index_t>& non_reduce_counter,
                     const std::vector<index_t>& reduce_counter,
                     const std::vector<bool>& is_reduce_dim,
