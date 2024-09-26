@@ -181,7 +181,7 @@ namespace Breeze {
         }
 
         void init_default() {
-            if (config_.is_reduction_) reduce_size = config_.reduce_dims_.size();
+            if (config_.is_reduction_) reduce_dim_size_ = config_.reduce_dims_.size();
         }
 
         void analysis_memory_layout() {
@@ -206,11 +206,11 @@ namespace Breeze {
 
             const size_t original_reduce_size = config_.reduce_dims_.size();
             const size_t input_dims = shape_.size();
-            const size_t output_dims = input_dims - reduce_size;
+            const size_t output_dims = input_dims - reduce_dim_size_;
 
-            BREEZE_ASSERT(input_dims >= reduce_size,
+            BREEZE_ASSERT(input_dims >= reduce_dim_size_,
                           "Invalid reduction: input dimensions (", input_dims,
-                          ") must be greater than or equal to reduce dimensions (", reduce_size, ")");
+                          ") must be greater than or equal to reduce dimensions (", reduce_dim_size_, ")");
 
             auto final_shape = std::vector<index_t>();
             auto final_strides = std::vector<index_t>();
@@ -299,36 +299,45 @@ namespace Breeze {
 
         template<typename ReduceOp>
         void reduce_strided_for_each(ReduceOp reduce_op) {
-            std::vector<index_t> non_reduce_shape(shape_.size() - reduce_size);
+            std::vector<index_t> non_reduce_shape(shape_.size() - reduce_dim_size_);
             index_t non_reduce_size = 1;
             for (size_t i = 0; i < non_reduce_shape.size(); ++i) {
-                non_reduce_shape[i] = shape_[i + reduce_size];
+                non_reduce_shape[i] = shape_[i + reduce_dim_size_];
                 non_reduce_size *= non_reduce_shape[i];
             }
-            // 计算归约维度的大小和步长
-            std::vector<index_t> reduce_shapes;
-            std::vector<std::array<index_t, ScalarTypesSize>> reduce_strides(reduce_size);
-            for (size_t j = 0; j < reduce_size; ++j) {
-                reduce_shapes.push_back(shape_[j]);
-                for (size_t k = 0; k < operands_.size(); ++k) {
-                    reduce_strides[j][k] = operands_[k].strides[j];
-                }
+            std::vector<index_t> reduce_shape;
+            index_t reduce_size = 1;
+            for (size_t j = 0; j < reduce_dim_size_; ++j) {
+                reduce_shape.push_back(shape_[j]);
+                reduce_size *= reduce_shape[j];
             }
-            #pragma omp parallel for default(none) \
-            shared(non_reduce_size, reduce_op, operands_, shape_, non_reduce_shape, config_, reduce_shapes, reduce_strides) \
-            schedule(dynamic, 64)
-            for (index_t i = 0; i < non_reduce_size; ++i) {
+            #pragma omp parallel
+            {
+                alignas(64) std::array<char*, ScalarTypesSize> data_ptrs;
+                ResultScalarType* loc_data_ptr;
                 std::vector<index_t> non_reduce_counter(non_reduce_shape.size());
-                Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
-                std::array<char*, ScalarTypesSize> data_ptrs;
-                // 初始化数据指针
-                for (size_t k = 0; k < operands_.size(); ++k) {
-                    data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * ResultTypeSize +
-                        Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);
-                }
-                for (size_t j = 0; j < reduce_size; ++j) {
-                    // 对所有 reduce 维度进行归约
-                    reduce_impl(data_ptrs, reduce_strides[j], reduce_shapes[j], reduce_op);
+                std::vector<index_t> reduce_counter(reduce_shape.size());
+                #pragma omp for schedule(dynamic, 1) nowait
+                for (index_t tile_start = 0; tile_start < non_reduce_size; tile_start += CACHE_LINE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + CACHE_LINE_SIZE, non_reduce_size);
+                    for (index_t i = tile_start; i < tile_end; ++i) {
+                        Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
+                        // 初始化数据指针
+                        for (size_t k = 0; k < operands_.size(); ++k) {
+                            data_ptrs[k] = operands_[k].data + operands_[k].begin_offset * ResultTypeSize +
+                                Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);
+                        }
+                        auto output_ptr = reinterpret_cast<OutputScalarType*>(data_ptrs[OptPutIndex]);
+                        OutputScalarType local_result = 0.0;
+                        for (index_t j = 0; j < reduce_size; ++j) {
+                            Utils::index_to_counter(j, reduce_counter, reduce_shape);
+                            loc_data_ptr = reinterpret_cast<OutputScalarType*>(data_ptrs[0] +
+                                   Utils::compute_offset(reduce_counter, operands_[0].strides_bytes, 0));
+                            local_result = reduce_op(local_result, *loc_data_ptr);
+                        }
+                        #pragma omp atomic
+                        *output_ptr += local_result;
+                    }
                 }
             }
         }
@@ -338,7 +347,7 @@ namespace Breeze {
         std::tuple<Tensor<ScalarTypes>*...> tensors_;
         std::vector<index_t> shape_{};
         std::vector<index_t> perm_{};
-        size_t reduce_size = 0;
+        size_t reduce_dim_size_ = 0;
         bool is_contiguous_{};
         bool is_inner_contiguous_{};
         bool has_coalesced_dimensions_{};
@@ -391,7 +400,7 @@ namespace Breeze {
                 for (index_t j = i; j < end; ++j) {
                     for (size_t op = 0; op < ScalarTypesSize; ++op) {
                         data_ptrs[op] = operands_[op].data + ResultTypeSize * operands_[op].begin_offset +
-                            compute_offset(counter, operands_[op].strides_bytes);
+                            Utils::compute_offset(counter, operands_[op].strides_bytes);
                         data_strides[op] = 1;
                     }
                     func(data_ptrs.data(), data_strides, inner_dim);
@@ -418,7 +427,7 @@ namespace Breeze {
                     for (index_t j = i; j < end; ++j) {
                         for (size_t op = 0; op < ScalarTypesSize; ++op) {
                             data_ptrs[op] =  operands_[op].data + operands_[op].begin_offset * ResultTypeSize +
-                                compute_offset(counter, operands_[op].strides_bytes);
+                                Utils::compute_offset(counter, operands_[op].strides_bytes);
                             data_strides[op] = operands_[op].strides.back();
                         }
                         func(data_ptrs.data(), data_strides, 1);
@@ -540,7 +549,7 @@ namespace Breeze {
                 // 聚合维度不参与 为了后面计算 需要保留信息
                 if (can_coalesce(last_dim, dim_i, std::make_index_sequence<sizeof... (Indices)>{})) {
                     if (dim_i < static_cast<index_t>(config_.reduce_dims_.size())) {
-                        --reduce_size;
+                        --reduce_dim_size_;
                     }
                     // 可以合并的情况
                     // 情况1：如果前一个维度的 shape 为 1
@@ -688,18 +697,6 @@ namespace Breeze {
             }
         }
 
-        template <typename ReduceOp>
-        void reduce_impl(std::array<char*, ScalarTypesSize> data_ptrs,
-            const std::array<index_t, ScalarTypesSize>& data_strides,const index_t reduce_dim_size, ReduceOp& reduce_op) {
-            auto in = reinterpret_cast<ResultScalarType*>(data_ptrs[0]);
-            auto out = reinterpret_cast<ResultScalarType*>(data_ptrs[1]);
-            *out = *in;
-            for (int64_t i = 0; i < reduce_dim_size -1; i++) {
-                in +=  data_strides[0];
-                out += data_strides[1];
-                *out = reduce_op(*out, *in);
-            }
-        }
 
         template<typename ScalarOp, typename VectorOp>
         void op_loop(ScalarOp& scalar_op, VectorOp& vector_op,

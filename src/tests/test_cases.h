@@ -1347,9 +1347,11 @@ public:
         {
 
             // std::cout << *a << std::endl;
-            // const auto tensor = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
-            const auto tensor = Tensor<float>::create_tensor({1000,1000,1000},1);
-            auto c = tensor->sum({0,1});
+            const auto tensor = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
+            // const auto tensor = Tensor<float>::create_tensor({1000,1000,1000},1);
+            // std::cout << *tensor << std::endl;
+
+            auto c = tensor->sum({0,1,2});
             std::cout << *c << std::endl;
             // MEASURE_TIME(tensor->sum({0,1,2}););
             // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);

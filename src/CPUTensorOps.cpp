@@ -101,8 +101,8 @@ namespace Breeze {
         .set_keep_keepdim(false);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
-            [](ResultT a_value, ResultT b_value) {
-                return a_value + b_value;
+            [](const ResultT a_value,const ResultT b_value) {
+              return a_value + b_value;
         });
         return result;
     }

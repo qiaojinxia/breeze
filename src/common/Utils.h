@@ -199,11 +199,15 @@ public:
         return result;
     }
 
-    [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter, const std::vector<index_t>& strides_bytes) {
+    [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter,
+        const std::vector<index_t>& strides_bytes, index_t s_offset = -1) {
+        if (s_offset == -1)
+            s_offset = strides_bytes.size() - counter.size();
         index_t offset = 0;
-        const auto size_offset = strides_bytes.size() - counter.size();
         for (size_t i = 0; i < counter.size(); ++i) {
-            offset += counter[i] * strides_bytes[i+ size_offset];
+            if (strides_bytes[i + s_offset] == 0)
+                continue;
+            offset += counter[i] * strides_bytes[i+ s_offset];
         }
         return offset;
     }
@@ -228,45 +232,8 @@ public:
     }
 
 
-    template<typename IndexType>
-    IndexType compute_flat_index(const std::vector<IndexType>& indices,
-                             const std::vector<IndexType>& shape,
-                             const std::vector<IndexType>& strides) {
-        IndexType flat_index = 0;
-        for (size_t i = 0; i < indices.size(); ++i) {
-            flat_index += indices[i] * strides[i];
-        }
-        return flat_index;
-    }
-
-    // 重载版本，使用 index_t 类型
-    static index_t compute_flat_index(const std::vector<index_t>& indices,
-                                     const std::vector<index_t>& shape,
-                                     const std::vector<index_t>& strides) {
-        index_t flat_index = 0;
-        for (size_t i = 0; i < indices.size(); ++i) {
-            flat_index += indices[i] * strides[i];
-        }
-        return flat_index;
-    }
-
-    static void merge_counters(const std::vector<index_t>& non_reduce_counter,
-                    const std::vector<index_t>& reduce_counter,
-                    const std::vector<bool>& is_reduce_dim,
-                    std::vector<index_t>& full_counter) {
-        full_counter.clear();
-        size_t non_reduce_idx = 0;
-        size_t reduce_idx = 0;
-        for (const bool is_reduce : is_reduce_dim) {
-            if (is_reduce) {
-                full_counter.push_back(reduce_counter[reduce_idx++]);
-            } else {
-                full_counter.push_back(non_reduce_counter[non_reduce_idx++]);
-            }
-        }
-    }
     static void index_to_counter(index_t index, std::vector<index_t>& counter, const std::vector<index_t>& index_shape) {
-        for (index_t i = static_cast<index_t>(counter.size()) - 1; i >= 0; --i) {
+        for (index_t i = 0 ; i < static_cast<index_t>(counter.size()); ++i) {
             counter[i] = index % index_shape[i];
             index /= index_shape[i];
         }
