@@ -89,21 +89,29 @@ namespace Breeze {
         );
     }
 
+
+
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::sum(
         Tensor<ScalarT1> &a, std::vector<index_t> &dims) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
-        .set_resize_outputs(true)
-        .set_reduce_dims(dims)
-        .set_is_reduction(true)
-        .set_keep_keepdim(false);
+            .set_resize_outputs(true)
+            .set_reduce_dims(dims)
+            .set_is_reduction(true)
+            .set_keep_keepdim(false);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
-            [](const ResultT a_value,const ResultT b_value) {
-              return a_value + b_value;
-        });
+             [](ResultT *out_ptr, ResultT a_value) {
+                 *out_ptr += a_value;
+             },
+             [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                 auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                 auto sum_vec = a_vec + out_vec;
+                 sum_vec.store(out_ptr);
+             }
+         );
         return result;
     }
 
@@ -114,7 +122,7 @@ namespace Breeze {
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
         iter.cpu_kernel_vec(
-            [](ResultT *out_ptr,ResultT a_value) {
+            [](ResultT *out_ptr, ResultT a_value) {
                 *out_ptr = std::sin(a_value);
             },
             [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {

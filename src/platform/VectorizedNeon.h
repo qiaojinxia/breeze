@@ -83,6 +83,16 @@ namespace Breeze {
             return Vectorized(vld1q_f32(ptr));
         }
 
+        template<typename T0, typename T1, typename T2, typename T3>
+        static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1, const T2* ptr2, const T3* ptr3) {
+            float32x4_t result;
+            result = vsetq_lane_f32(static_cast<float>(*ptr0), result, 0);
+            result = vsetq_lane_f32(static_cast<float>(*ptr1), result, 1);
+            result = vsetq_lane_f32(static_cast<float>(*ptr2), result, 2);
+            result = vsetq_lane_f32(static_cast<float>(*ptr3), result, 3);
+            return Vectorized(result);
+        }
+
         void store(float* ptr) const {
             vst1q_f32(ptr, values);
         }
@@ -154,6 +164,16 @@ namespace Breeze {
         static Vectorized loadu(const double* ptr) {
             return Vectorized(vld1q_f64(ptr));
         }
+
+        // 不连续内存加载函数
+        template<typename T0, typename T1>
+        static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1) {
+            float64x2_t result;
+            result = vsetq_lane_f64(static_cast<double>(*ptr0), result, 0);
+            result = vsetq_lane_f64(static_cast<double>(*ptr1), result, 1);
+            return Vectorized(result);
+        }
+
 
         static void prefetch(const double* ptr) {
             asm volatile("prfm pldl1keep, [%0]" : : "r" (ptr));

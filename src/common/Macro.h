@@ -81,8 +81,8 @@ typedef int8_t QInt8;
     } while (0)
 
 
-inline void breeze_assert_print(std::ostringstream& oss) {
-    // Base case: do nothing
+inline void breeze_assert_print(const std::ostringstream& oss) {
+    (void)oss;
 }
 
 template<typename T, typename... Args>

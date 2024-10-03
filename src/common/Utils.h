@@ -202,7 +202,7 @@ public:
     [[nodiscard]] static index_t compute_offset(const std::vector<index_t>& counter,
         const std::vector<index_t>& strides_bytes, index_t s_offset = -1) {
         if (s_offset == -1)
-            s_offset = strides_bytes.size() - counter.size();
+            s_offset = static_cast<index_t>(strides_bytes.size() - counter.size());
         index_t offset = 0;
         for (size_t i = 0; i < counter.size(); ++i) {
             if (strides_bytes[i + s_offset] == 0)
