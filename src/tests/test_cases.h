@@ -6,7 +6,7 @@
 #define TEST_SQUEEZE_H
 #include <iostream>
 #include <vector>
-#include <cassert>
+
 #include "../CPUTensor.h"
 #include "../common/Macro.h"
 
@@ -1347,22 +1347,46 @@ public:
         {
 
             // std::cout << *a << std::endl;
-            // const auto tensor = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
-            const auto tensor = Tensor<float>::create_tensor({1000,1000,1000},1);
+            // const auto tensor = Tensor<float>::arange(0,12000,1)->view({20,3,4,50});
+            // const auto tensor = Tensor<float>::create_tensor({1000,1000,1000},1);
             // std::cout << *tensor << std::endl;
             // const auto a = Tensor<float>::arange(0,20,1)->view({5,4});
             // std::cout << *a << std::endl;
             // const auto b =  a->clone();
             // const auto c =  *a + *b;
             // std::cout << *b << std::endl;
-            // MEASURE_TIME(tensor->sum({1}););
+            // MEASURE_TIME(tensor->sum({1,3}););
             // auto c = tensor->sum({0,3});
             // std::cout << *c << std::endl;
             // MEASURE_TIME(tensor->sum({0,1,2}););
             // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);
-            // MEASURE_TIME(const auto a = CPUTensor<float>({1000,1000,1000},2););
+
+            // {
+            //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
+            //     const auto tensor2 = Tensor<float>::create_tensor({1000,1000,1000},0.3);
+            //     auto c = *tensor1 * *tensor2;
+            // }
+
+            {
+                const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
+                const auto tensor2 = Tensor<float>::create_tensor({1000,1000,1000},0.3);
+                MEASURE_TIME( *tensor1 * *tensor2);
+            }
+
+            // {
+            //     const auto tensor1 = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
+            //     const auto s_tensor1 = tensor1->sum({0,3});
+            //     std::cout << *s_tensor1 << std::endl;
+            //
+            // }
+
+            // {
+            //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},1);
+            //     const auto s_tensor1 = tensor1->sum({0,1,2});
+            //     std::cout << *s_tensor1 << std::endl;
+            //
+            // }
             // // MEASURE_TIME(a - b);
-            // MEASURE_TIME(*a + *b);
             //
             // const auto a = CPUTensor<float>::randn({2, 3, 4});
             // std::cout << *a << std::endl;

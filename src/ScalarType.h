@@ -24,6 +24,19 @@ namespace Breeze {
     template <> struct TypeToScalarType<double> { static constexpr auto value = ScalarType::Double; };
     template <> struct TypeToScalarType<bool> { static constexpr auto value = ScalarType::Bool; };
 
+    inline std::string scalar_type_to_string(const ScalarType type) {
+        switch (type) {
+            case ScalarType::Float:
+                return "Float";
+            case ScalarType::Double:
+                return "Double";
+            case ScalarType::Bool:
+                return "Bool";
+            default:
+                return "Unknown";
+        }
+    }
+
     inline std::vector<index_t> calc_strides_bytes(const ScalarType scalar_t, const std::vector<index_t>& strides) {
         index_t byte_size;
         switch (scalar_t) {

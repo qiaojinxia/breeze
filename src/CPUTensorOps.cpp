@@ -110,6 +110,13 @@ namespace Breeze {
                  auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
                  auto sum_vec = a_vec + out_vec;
                  sum_vec.store(out_ptr);
+             },
+             [](const ResultT* data, const index_t size) {
+                 double sum_val = 0.0;
+                 for (index_t i = 0; i < size; ++i) {
+                      sum_val += data[i];
+                 }
+                 return sum_val;
              }
          );
         return result;

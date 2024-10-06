@@ -207,7 +207,7 @@ public:
         for (size_t i = 0; i < counter.size(); ++i) {
             if (strides_bytes[i + s_offset] == 0)
                 continue;
-            offset += counter[i] * strides_bytes[i+ s_offset];
+            offset += counter[i] * strides_bytes[i + s_offset];
         }
         return offset;
     }
@@ -239,6 +239,9 @@ public:
         }
     }
 
+
 };
+
+
 
 #endif //UTILS_H

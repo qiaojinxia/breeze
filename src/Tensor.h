@@ -230,9 +230,7 @@ namespace Breeze {
             end_dim = ndim - 1;
         }
 
-        if (start_dim > end_dim || end_dim >= ndim) {
-            throw std::invalid_argument("Invalid dimension range");
-        }
+        BREEZE_ASSERT(start_dim <= end_dim && end_dim < ndim, "Invalid dimension range");
 
         index_t expected_stride = 1;
         for (index_t i = ndim - 1; i >= 0; --i) {
