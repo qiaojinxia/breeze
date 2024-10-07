@@ -247,6 +247,10 @@ public:
         }
     }
 
+    static bool is_64byte_aligned(const void* ptr) {
+        const auto addr = reinterpret_cast<uintptr_t>(ptr);
+        return (addr & 0x3F) == 0;
+    }
 
 };
 

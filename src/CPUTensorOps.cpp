@@ -60,7 +60,7 @@ namespace Breeze {
     void CPUTensorOps<ScalarTypes...>::randn(Tensor<ScalarT1> &a) const {
         using ScalarT1 = typename BaseOps::ScalarT1;
         auto iter = TensorIterator<ScalarT1>::nullary_op(a);
-        pcg_extras::seed_seq_from<std::random_device> seed_source;
+        alignas(64) pcg_extras::seed_seq_from<std::random_device> seed_source;
         // 创建 PCG 随机数生成器
         pcg32 rng(seed_source);
         std::normal_distribution<ScalarT1> dist(0.0, 1.0);

@@ -171,7 +171,8 @@ namespace Breeze {
                 }
                 auto new_shape = Shape(output_dims);
                 get_tensor<OptPutIndex>().set_initial_shape(new_shape);
-                operands_[OptPutIndex] = OperandInfo(const_cast<ResultScalarType*>(get_tensor<OptPutIndex>().mutable_data() + get_tensor<OptPutIndex>().get_offset()),
+                operands_[OptPutIndex] = OperandInfo(const_cast<ResultScalarType*>(
+                    get_tensor<OptPutIndex>().mutable_data() + get_tensor<OptPutIndex>().get_offset()),
                     get_tensor<OptPutIndex>().get_strides(), true, true);
             }
 
@@ -396,7 +397,7 @@ namespace Breeze {
                 "Invalid shape for contiguous_for_each: expected contiguous tensor");
             const index_t numel = shape_.back();
             #pragma omp parallel default(none) \
-            shared(numel, for_each_func, operands_)
+            shared(operands_, for_each_func) firstprivate(numel)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::array<index_t, ScalarTypesSize> tile_data_strides;
@@ -421,30 +422,22 @@ namespace Breeze {
             const index_t numel = shape_.back();
 
             #pragma omp parallel default(none) \
-            shared(numel, scalar_op, vector_op, operands_)
+            shared(operands_, scalar_op, vector_op) firstprivate(numel, shape_)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
 
-                #pragma omp for schedule(dynamic, 64)
+                #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
                     const index_t tile_elements = tile_end - tile_start;
 
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
-                        BREEZE_ASSERT(operands_[k].strides_bytes.size() == 1,
-                            "Invalid strides for operand ", k,
-                            ": expected size 1, but got ", operands_[k].strides_bytes.size(),
-                            ". Operands must have 1-dimensional strides.");
-
-                        BREEZE_ASSERT(operands_[k].strides_bytes[0] == ResultTypeSize,
-                            "Invalid stride for operand ", k,
-                            ": expected stride equal to Size (", ResultTypeSize,
-                            "), but got ", operands_[k].strides_bytes[0],
-                            ". Ensure the tensor is contiguous and elements are of the correct size.");
-                        tile_data_ptrs[k] = operands_[k].data + tile_start * operands_[k].strides_bytes[0];
+                        BREEZE_ASSERT(operands_[k].strides_bytes.size() == 1 &&
+                                      operands_[k].strides_bytes[0] == ResultTypeSize,
+                            "Invalid strides for operand " + std::to_string(k));
+                        tile_data_ptrs[k] = operands_[k].data + tile_start * ResultTypeSize;
                     }
-
-                    char* tile_output_ptr = tile_data_ptrs[OptPutIndex];
+                    alignas(64) char* tile_output_ptr = tile_data_ptrs[OptPutIndex];
                     op_loop(scalar_op, vector_op, tile_data_ptrs, tile_output_ptr, tile_elements);
                 }
             }
@@ -454,34 +447,33 @@ namespace Breeze {
         template<typename ForEachFunc>
         void inner_contiguous_for_each(ForEachFunc for_each_func) {
             const index_t inner_dim = shape_.back();
-            const index_t outer_dim = std::accumulate(shape_.begin() + 1, shape_.end(), 1LL, std::multiplies<>());
+            const index_t outer_dim = std::accumulate(shape_.begin() + 1,
+                shape_.end(), 1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(outer_dim, inner_dim, for_each_func, operands_, shape_)
+            shared(operands_, for_each_func) firstprivate(inner_dim, outer_dim, shape_)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::vector<index_t> tile_counter(shape_.size() - 1);
                 std::array<index_t, ScalarTypesSize> tile_data_strides;
+                std::vector<index_t> tile_counter(shape_.size() - 1);
 
-                #pragma omp for schedule(dynamic, 64)
+                #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < outer_dim; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_dim);
                     Utils::index_to_counter(tile_start, tile_counter, shape_);
 
-                    for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-                        for (size_t k = 0; k < ScalarTypesSize; ++k) {
-                            BREEZE_ASSERT(operands_[k].strides[0] == 1,  "Invalid strides for operand ", k,
-                            ": expected last stride 1, but got ", operands_[k].strides[0], ". Operands last stride must contiguous.");
-                            tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes);
-                            tile_data_strides[k] = operands_[k].strides.back();
-                        }
+                    for (size_t k = 0; k < ScalarTypesSize; ++k) {
+                        BREEZE_ASSERT(operands_[k].strides[0] == 1, "Invalid strides for operand " + std::to_string(k));
+                        tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes);
+                        tile_data_strides[k] = operands_[k].strides[0];
+                    }
 
+                    for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
                         for_each_func(tile_data_ptrs.data(), tile_data_strides.data(), inner_dim);
                     }
                 }
             }
         }
-
 
         template<typename ScalarOp, typename VectorOp>
         void inner_contiguous_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
@@ -489,7 +481,7 @@ namespace Breeze {
             const index_t outer_size = std::accumulate(shape_.begin() + 1, shape_.end(), 1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(outer_size, scalar_op, vector_op, shape_, inner_size, operands_)
+            shared(operands_, scalar_op, vector_op) firstprivate(outer_size, inner_size, shape_)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::vector<index_t> tile_counter(shape_.size() - 1);
@@ -497,7 +489,6 @@ namespace Breeze {
                 #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
-
                     for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
                         Utils::index_to_counter(tile_idx, tile_counter, shape_);
 
@@ -505,9 +496,9 @@ namespace Breeze {
                             BREEZE_ASSERT(operands_[k].strides[0] == 1,  "Invalid strides for operand ", k,
                             ": expected last stride 1, but got ", operands_[k].strides[0], ". Operands last stride must contiguous.");
                             tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes);
-                        }
 
-                        char* output_ptr = tile_data_ptrs[OptPutIndex];
+                        }
+                        alignas(64) char* output_ptr = tile_data_ptrs[OptPutIndex];
                         op_loop(scalar_op, vector_op, tile_data_ptrs, output_ptr, inner_size);
                     }
                 }
@@ -516,16 +507,17 @@ namespace Breeze {
 
         template<typename ForEachFunc>
         void strided_for_each(ForEachFunc for_each_func) {
-            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(),
+                1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(numel, for_each_func, operands_, shape_)
+            shared(for_each_func, operands_) firstprivate(numel, shape_)
             {
                 alignas(64)  std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::array<index_t, ScalarTypesSize> tile_data_strides;
                 std::vector<index_t> tile_counter(shape_.size());
 
-                #pragma omp for schedule(dynamic, 64)
+                #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
                     Utils::index_to_counter(tile_start, tile_counter, shape_);
@@ -545,13 +537,15 @@ namespace Breeze {
 
         template<typename ScalarOp>
         void strided_kernel_vec(ScalarOp scalar_op) {
-            const index_t numel = std::accumulate(shape_.begin(), shape_.end(), 1LL, std::multiplies<>());
+            const index_t numel = std::accumulate(shape_.begin(), shape_.end(),
+                1LL, std::multiplies<>());
+
             #pragma omp parallel default(none) \
-            shared(numel, scalar_op, operands_, shape_)
+            shared(scalar_op, operands_) firstprivate(numel, shape_)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::vector<index_t> tile_counter(shape_.size());
-                #pragma omp for schedule(dynamic, 64)
+                #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
                     Utils::index_to_counter(tile_start, tile_counter, shape_);
@@ -744,14 +738,14 @@ namespace Breeze {
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<Indices...>) {
 
             constexpr index_t prefetch_elements = CACHE_LINE_SIZE / sizeof(ResultScalarType) / SimdVrctorSize; // 以元素数量计的预读取数量
-            index_t prefetch_counter = 0;
+            index_t prefetch_counter = -1;
             for (index_t i = 0; i <= size - simd_vector_size; i += simd_vector_size) {
                 // 执行向量化操作 如果要实现不同类型操作可以在 loadu 添加转换
                 vector_op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
                    Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(data_ptrs[Indices]) + i)...);
                 // 每处理 prefetch_elements 个向量后进行一次预读取
                 if (++prefetch_counter == prefetch_elements) {
-                    prefetch_counter = 0;
+                    prefetch_counter = -1;
                     if (i < size - prefetch_elements) {
                         Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(output_ptr) + i + prefetch_elements);
                         (Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(data_ptrs[Indices]) + i + prefetch_elements), ...);

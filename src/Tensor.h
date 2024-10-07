@@ -126,6 +126,7 @@ namespace Breeze {
         static std::shared_ptr<Tensor> create_tensor(std::vector<index_t> shape,Device device = Device::CPU);
         static std::shared_ptr<Tensor> create_tensor(std::vector<index_t> shape, ScalarType value,Device device = Device::CPU);
         static std::shared_ptr<Tensor> arange(ScalarType start, ScalarType end, ScalarType step,  Device device= Device::CPU);
+        static std::shared_ptr<Tensor> randn(std::vector<index_t> shape,  Device device= Device::CPU);
         static std::shared_ptr<Tensor> vector(index_t size, Device device= Device::CPU);
         static std::shared_ptr<Tensor> scalar(ScalarType value, Device device= Device::CPU);
     };
@@ -157,6 +158,16 @@ namespace Breeze {
             return nullptr;
         }
     }
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::randn(std::vector<index_t> shape, const Device device) {
+        if (device == Device::CPU) {
+            return CPUTensor<ScalarType>::randn(shape);
+        } else {
+            return nullptr;
+        }
+    }
+
 
     template<typename ScalarType>
     std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::vector(const index_t size, const Device device) {

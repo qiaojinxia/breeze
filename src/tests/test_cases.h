@@ -1344,11 +1344,16 @@ public:
     //
     static void test_OP() {
 
-        {
-            const auto tensor = Tensor<float>::arange(1,61,1)->view({3,4,5});
-            const auto mean_all = tensor->mean({1,2});
-            std::cout << *mean_all << std::endl;
-        }
+        // {
+        //     const auto tensor = Tensor<float>::randn({1000,1000,1000});
+        //     const auto mean_all = tensor->mean({});
+        //     std::cout << *mean_all << std::endl;
+        // }
+        // {
+        //     const auto tensor = Tensor<float>::arange(1,61,1)->view({3,4,5});
+        //     const auto mean_all = tensor->mean({1,2});
+        //     std::cout << *mean_all << std::endl;
+        // }
         {
 
             // std::cout << *a << std::endl;
@@ -1366,11 +1371,12 @@ public:
             // MEASURE_TIME(tensor->sum({0,1,2}););
             // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);
 
-            // {
-            //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
-            //     const auto tensor2 = Tensor<float>::create_tensor({1000,1000,1000},0.3);
-            //     auto c = *tensor1 * *tensor2;
-            // }
+            {
+                const auto tensor1 = Tensor<float>::create_tensor({1,1,1},0.1);
+                const auto tensor2 = Tensor<float>::create_tensor({1,1,1},0.3);
+                auto c = *tensor1 * *tensor2;
+                std::cout << *c << std::endl;
+            }
 
             // {
             //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
