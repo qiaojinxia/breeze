@@ -1345,6 +1345,11 @@ public:
     static void test_OP() {
 
         {
+            const auto tensor = Tensor<float>::arange(1,61,1)->view({3,4,5});
+            const auto mean_all = tensor->mean({1,2});
+            std::cout << *mean_all << std::endl;
+        }
+        {
 
             // std::cout << *a << std::endl;
             // const auto tensor = Tensor<float>::arange(0,12000,1)->view({20,3,4,50});
@@ -1367,24 +1372,30 @@ public:
             //     auto c = *tensor1 * *tensor2;
             // }
 
-            {
-                const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
-                const auto tensor2 = Tensor<float>::create_tensor({1000,1000,1000},0.3);
-                MEASURE_TIME( *tensor1 * *tensor2);
-            }
+            // {
+            //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
+            //     const auto tensor2 = Tensor<float>::create_tensor({1000,1000,1000},0.3);
+            //     MEASURE_TIME( *tensor1 * *tensor2);
+            // }
 
             // {
             //     const auto tensor1 = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
-            //     const auto s_tensor1 = tensor1->sum({0,3});
+            //     const auto s_tensor1 = tensor1->sum({0,2});
             //     std::cout << *s_tensor1 << std::endl;
             //
             // }
 
-            // {
-            //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},1);
-            //     const auto s_tensor1 = tensor1->sum({0,1,2});
-            //     std::cout << *s_tensor1 << std::endl;
+            {
+                // const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},1);
+                // MEASURE_TIME(tensor1->sum({0,1,2}));
+                //  const auto m_tensor1 = tensor1->sum({0,1,2});
+                // std::cout << *m_tensor1 << std::endl;
+            }
             //
+            // {
+            //     const auto tensor1 = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
+            //     const auto m_tensor1 = tensor1->max({2});
+            //     std::cout << *m_tensor1 << std::endl;
             // }
             // // MEASURE_TIME(a - b);
             //

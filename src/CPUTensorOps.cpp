@@ -89,8 +89,6 @@ namespace Breeze {
         );
     }
 
-
-
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::sum(
         Tensor<ScalarT1> &a, std::vector<index_t> &dims) const {
@@ -112,13 +110,82 @@ namespace Breeze {
                  sum_vec.store(out_ptr);
              },
              [](const ResultT* data, const index_t size) {
-                 double sum_val = 0.0;
-                 for (index_t i = 0; i < size; ++i) {
+                 ResultT sum_val = data[0];
+                 for (index_t i = 1; i < size; ++i) {
                       sum_val += data[i];
                  }
                  return sum_val;
              }
          );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::max(
+      Tensor<ScalarT1> &a, std::vector<index_t> &dims) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        const TensorIteratorConfig config = TensorIteratorConfig()
+            .set_resize_outputs(true)
+            .set_reduce_dims(dims)
+            .set_is_reduction(true)
+            .set_keep_keepdim(false);
+        auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
+        iter.reduce_strided_for_each(
+             [](ResultT *out_ptr, ResultT a_value) {
+                  *out_ptr = std::max(*out_ptr, a_value);
+             },
+             [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                 auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                 auto max_vec = Vectorized<ResultT>::max(out_vec, a_vec);
+                 max_vec.store(out_ptr);
+             },
+             [](const ResultT* data, const index_t size) {
+                 ResultT max_val = data[0];
+                 for (index_t i = 1; i < size; ++i) {
+                      max_val = std::max(max_val, data[i]);
+                 }
+                 return max_val;
+             }
+         );
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::mean(
+        Tensor<ScalarT1> &a, std::vector<index_t> &dims) const {
+        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        // 计算总元素数
+        index_t total_elements = 1;
+        for (const auto dim : dims ) {
+            total_elements *= a.get_shape().dims()[dim];
+        }
+
+        const TensorIteratorConfig config = TensorIteratorConfig()
+               .set_resize_outputs(true)
+               .set_reduce_dims(dims)
+               .set_is_reduction(true)
+               .set_keep_keepdim(false);
+
+        auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
+        iter.reduce_strided_for_each(
+            [](ResultT *out_ptr, ResultT a_value) {
+                *out_ptr += a_value;
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                auto sum_vec = out_vec + a_vec;
+                sum_vec.store(out_ptr);
+            },
+            [total_elements](const ResultT* data, const index_t size) {
+                ResultT sum_val = 0;
+                for (index_t i = 0; i < size; ++i) {
+                    sum_val += data[i];
+                }
+                return sum_val / static_cast<ResultT>(total_elements);
+            }
+        );
         return result;
     }
 

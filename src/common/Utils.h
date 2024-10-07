@@ -231,6 +231,14 @@ public:
         return result;
     }
 
+    static std::vector<index_t> create_index_sequence(const index_t n) {
+        std::vector<index_t> sequence;
+        sequence.reserve(n);
+        for (index_t i = 0; i < n; ++i) {
+            sequence.push_back(i);
+        }
+        return sequence;
+    }
 
     static void index_to_counter(index_t index, std::vector<index_t>& counter, const std::vector<index_t>& index_shape) {
         for (index_t i = 0 ; i < static_cast<index_t>(counter.size()); ++i) {

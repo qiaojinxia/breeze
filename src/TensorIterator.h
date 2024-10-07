@@ -188,9 +188,7 @@ namespace Breeze {
                 is_contiguous_ &= is_contiguous(op.strides, shape_);
             }
 
-            is_reduce_dim_contiguous_ = (reduce_dim_size_ == 1) ||
-                (reduce_dim_size_ > 1 && operands_[0].strides[reduce_dim_size_ - 1] == 1);
-
+            is_reduce_dim_contiguous_ =  reduce_dim_size_ > 0 && operands_[0].strides[reduce_dim_size_ - 1] == 1;
 
             is_inner_contiguous_ = true;
             for (const auto& op : operands_) {
@@ -326,7 +324,7 @@ namespace Breeze {
             }
         }
 
-        template<typename ReduceScalarOp, typename ReduceVectorOp,typename FinalReduceOp>
+        template<typename ReduceScalarOp, typename ReduceVectorOp, typename FinalReduceOp>
         void reduce_strided_for_each(ReduceScalarOp reduce_scalar_op, ReduceVectorOp reduce_vector_op, FinalReduceOp final_reduce_op) {
             std::vector<index_t> non_reduce_shape(shape_.size() - reduce_dim_size_);
             std::vector<index_t> reduce_shape;
@@ -336,13 +334,15 @@ namespace Breeze {
                 non_reduce_shape[i] = shape_[i + reduce_dim_size_];
                 non_reduce_size *= non_reduce_shape[i];
             }
+
             for (size_t j = 0; j < reduce_dim_size_; ++j) {
                 reduce_shape.push_back(shape_[j]);
                 reduce_size *= reduce_shape[j];
             }
 
-            const index_t simd_unaligned_start_offset  = reduce_size - reduce_size % SimdVrctorSize;
+            const index_t simd_unaligned_start_offset = reduce_size - reduce_size % SimdVrctorSize;
             const index_t final_reduce_size = reduce_size < SimdVrctorSize ? reduce_size : SimdVrctorSize;
+
             #pragma omp parallel default(none) shared(reduce_size, reduce_shape, \
                 non_reduce_shape, non_reduce_size, reduce_vector_op, reduce_scalar_op, \
                 final_reduce_op, operands_, is_reduce_dim_contiguous_, final_reduce_size, simd_unaligned_start_offset)
@@ -350,43 +350,45 @@ namespace Breeze {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::array<ResultScalarType, SimdVrctorSize> local_reduce_vec = {};
                 std::vector<index_t> non_reduce_counter(non_reduce_shape.size());
-                std::vector<index_t> reduce_counter(reduce_shape.size());
+
+                auto process_tile = [&](const index_t i) {
+                    local_reduce_vec.fill(0);
+                    Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
+                    for (size_t k = 0; k < operands_.size(); ++k) {
+                        tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);
+                    }
+
+                    if (is_reduce_dim_contiguous_) {
+                        for (index_t j = 0; j <= reduce_size - SimdVrctorSize; j += SimdVrctorSize) {
+                            reduce_vector_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec),
+                                Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[0]) + j));
+                        }
+                        for (index_t j = simd_unaligned_start_offset; j < reduce_size; ++j) {
+                            const index_t vec_offset = j % SimdVrctorSize;
+                            reduce_scalar_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec) + vec_offset,
+                                *(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[0]) + j));
+                        }
+                    } else {
+                        reduce_non_contiguous(tile_data_ptrs[0], reduce_shape,
+                            operands_[0].strides_bytes, reduce_scalar_op, reduce_vector_op,
+                            reduce_size, local_reduce_vec,
+                            simd_unaligned_start_offset, std::make_index_sequence<SimdVrctorSize>{});
+                    }
+
+                    ResultScalarType tile_result = final_reduce_op(local_reduce_vec.data(), final_reduce_size);
+                    *reinterpret_cast<ResultScalarType*>(tile_data_ptrs[OptPutIndex]) = tile_result;
+                };
+
                 #pragma omp for schedule(dynamic, 1) nowait
                 for (index_t tile_start = 0; tile_start < non_reduce_size; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, non_reduce_size);
                     for (index_t i = tile_start; i < tile_end; ++i) {
-                        local_reduce_vec.fill(0);
-                        Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
-                        for (size_t k = 0; k < operands_.size(); ++k) {
-                            tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);
-                        }
-                        if (is_reduce_dim_contiguous_) {
-                            // 如果合并的维度都是连续的
-                            // 步长为 1 可以一次性加载多个 如果合并有 reduce_size
-                            // 有 100 那么一次 n 个 100 / n 次相加然后再把 n 个加起来
-                            for (index_t j = 0; j <= reduce_size - SimdVrctorSize; j += SimdVrctorSize) {
-                                reduce_vector_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec),
-                                    Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[0]) + j));
-                            }
-                            for (index_t j = simd_unaligned_start_offset; j < reduce_size; ++j) {
-                                reduce_scalar_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec),
-                                    *(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[j % SimdVrctorSize]) + j));
-                            }
-                        } else {
-                            // 对于不连续的 就只能计算偏移 然后加载进 simd 执行
-                            reduce_non_contiguous(tile_data_ptrs[0], reduce_shape,
-                                operands_[0].strides_bytes, reduce_scalar_op, reduce_vector_op,
-                                reduce_size, local_reduce_vec,
-                                simd_unaligned_start_offset, std::make_index_sequence<SimdVrctorSize>{});
-                        }
-
-                        ResultScalarType tile_result = final_reduce_op(local_reduce_vec.data(), final_reduce_size);
-                        #pragma omp atomic
-                        *reinterpret_cast<ResultScalarType*>(tile_data_ptrs[OptPutIndex]) += tile_result;
+                        process_tile(i);
                     }
                 }
             }
         }
+
 
         template<typename ForEachFunc>
         void contiguous_for_each(ForEachFunc for_each_func) {

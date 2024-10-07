@@ -120,13 +120,13 @@ namespace Breeze {
     DEFINE_UNARY_OP(atan)
 
     template<typename ScalarType>
-   std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform sum on an empty tensor.");
         // 如果维度为空，则返回整个张量的和
         if (dims.empty()) {
-            std::vector<index_t> all_dim = this->get_shape().dims();
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
             return CPUTensorOps<ScalarType>::getInstance().sum(*this, all_dim);
         }
         // 检查维度的有效性
@@ -141,6 +141,63 @@ namespace Breeze {
             "Duplicate dimensions are not allowed in the sum operation.");
         // 执行求和操作
         return CPUTensorOps<ScalarType>::getInstance().sum(*this, dims);
+    }
+
+
+    template<typename ScalarType>
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims) {
+        const index_t ndim = this->shape.ndim();
+        // 检查张量是否为空
+        BREEZE_ASSERT(ndim > 0, "Cannot perform max on an empty tensor.");
+
+        // 如果维度为空，则返回整个张量的最大值
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().max(*this, all_dim);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the max operation.");
+
+        // 执行最大值操作
+        return CPUTensorOps<ScalarType>::getInstance().max(*this, dims);
+    }
+
+    template<typename ScalarType>
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims) {
+        const index_t ndim = this->shape.ndim();
+        // 检查张量是否为空
+        BREEZE_ASSERT(ndim > 0, "Cannot perform mean on an empty tensor.");
+
+        // 如果维度为空，则返回整个张量的平均值
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().mean(*this, all_dim);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the mean operation.");
+
+        // 执行平均值操作
+        return CPUTensorOps<ScalarType>::getInstance().mean(*this, dims);
     }
 
     DEFINE_BINARY_OP(pow, pow)

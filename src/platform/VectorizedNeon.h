@@ -79,13 +79,21 @@ namespace Breeze {
             return Vectorized(vld1q_f32(reinterpret_cast<const float*>(ptr)));
         }
 
+        [[nodiscard]] Vectorized max(const Vectorized& other) const {
+            return Vectorized(vmaxq_f32(values, other.values));
+        }
+
+        static Vectorized max(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(vmaxq_f32(a.values, b.values));
+        }
+
         static Vectorized loadu(const float* ptr) {
             return Vectorized(vld1q_f32(ptr));
         }
 
         template<typename T0, typename T1, typename T2, typename T3>
         static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1, const T2* ptr2, const T3* ptr3) {
-            float32x4_t result;
+            float32x4_t result = vdupq_n_f32(0.0f);
             result = vsetq_lane_f32(static_cast<float>(*ptr0), result, 0);
             result = vsetq_lane_f32(static_cast<float>(*ptr1), result, 1);
             result = vsetq_lane_f32(static_cast<float>(*ptr2), result, 2);
@@ -157,6 +165,14 @@ namespace Breeze {
             return Vectorized(vec_result);
         }
 
+        [[nodiscard]] Vectorized max(const Vectorized& other) const {
+            return Vectorized(vmaxq_f64(values, other.values));
+        }
+
+        static Vectorized max(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(vmaxq_f64(a.values, b.values));
+        }
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(vld1q_f64(reinterpret_cast<const double*>(ptr)));
         }
@@ -168,7 +184,7 @@ namespace Breeze {
         // 不连续内存加载函数
         template<typename T0, typename T1>
         static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1) {
-            float64x2_t result;
+            float64x2_t result = vdupq_n_f64(0.0);
             result = vsetq_lane_f64(static_cast<double>(*ptr0), result, 0);
             result = vsetq_lane_f64(static_cast<double>(*ptr1), result, 1);
             return Vectorized(result);
