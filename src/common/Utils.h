@@ -192,10 +192,6 @@ public:
         for (size_t i = 0; i < offset; ++i) {
             result[i] = 0;  // 新增的维度的stride为0
         }
-        // 确保至少有一个非零stride
-        if (std::all_of(result.begin(), result.end(), [](const index_t x) { return x == 0; })) {
-            result.back() = 1;
-        }
         return result;
     }
 
@@ -250,6 +246,32 @@ public:
     static bool is_64byte_aligned(const void* ptr) {
         const auto addr = reinterpret_cast<uintptr_t>(ptr);
         return (addr & 0x3F) == 0;
+    }
+
+    static void increment_counter(std::vector<index_t>& counter, const std::vector<index_t>& shape, index_t increment = 1) {
+        const auto num_dims = static_cast<index_t>(counter.size());
+        BREEZE_ASSERT(num_dims == static_cast<index_t>( shape.size()), "Counter and shape dimensions mismatch");
+        for (index_t dim = num_dims - 1; dim >= 0; --dim) {
+            counter[dim] += increment;
+            if (counter[dim] < shape[dim]) {
+                break;
+            }
+            counter[dim] = 0;
+            increment = 1;
+        }
+    }
+
+
+    static bool is_contiguous(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
+        // 标量 或者 一维向量的步长 为1 表示连续
+        if (strides.empty() || (strides.size() <= 1 &&  strides[0] == 1)) return true;
+        index_t expected_stride = 1;
+        for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
+            if (shape[i] == 1) continue;
+            if (strides[i] != expected_stride) return false;
+            expected_stride *= shape[i];
+        }
+        return true;
     }
 
 };

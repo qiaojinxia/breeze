@@ -301,6 +301,10 @@ namespace Breeze {
         using ResultType = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultType>>();
         auto iter = TensorIterator<ScalarT1, ScalarT2>::binary_op(*result, a, b);
+
+        //判断是否标量 得到标量的值 然后 直接把标量值操作
+
+
         iter.cpu_kernel_vec(
            [](ResultType* out_ptr, const ResultType a_value, const ResultType b_value) {
                *out_ptr = a_value - b_value;

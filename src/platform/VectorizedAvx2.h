@@ -69,12 +69,39 @@ namespace Breeze {
             return Vectorized(vec_result);
         }
 
+
+        [[nodiscard]] Vectorized max(const Vectorized& other) const {
+            return Vectorized(_mm256_max_ps(values, other.values));
+        }
+
+        static Vectorized max(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(_mm256_max_ps(a.values, b.values));
+        }
+
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(_mm256_loadu_ps(reinterpret_cast<const float*>(ptr)));
         }
 
         static Vectorized loadu(const float* ptr) {
             return Vectorized(_mm256_loadu_ps(ptr));
+        }
+
+
+        template<typename T0, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7>
+        static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1, const T2* ptr2, const T3* ptr3,
+                                          const T4* ptr4, const T5* ptr5, const T6* ptr6, const T7* ptr7) {
+            const __m256 result = _mm256_set_ps(
+                static_cast<float>(*ptr7),
+                static_cast<float>(*ptr6),
+                static_cast<float>(*ptr5),
+                static_cast<float>(*ptr4),
+                static_cast<float>(*ptr3),
+                static_cast<float>(*ptr2),
+                static_cast<float>(*ptr1),
+                static_cast<float>(*ptr0)
+            );
+            return Vectorized(result);
         }
 
         void store(float* ptr) const {
@@ -144,12 +171,31 @@ namespace Breeze {
             return Vectorized(vec_result);
         }
 
+        [[nodiscard]] Vectorized max(const Vectorized& other) const {
+            return Vectorized(_mm256_max_pd(values, other.values));
+        }
+
+        static Vectorized max(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(_mm256_max_pd(a.values, b.values));
+        }
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(_mm256_loadu_pd(reinterpret_cast<const double*>(ptr)));
         }
 
         static Vectorized loadu(const double* ptr) {
             return Vectorized(_mm256_loadu_pd(ptr));
+        }
+
+        template<typename T0, typename T1, typename T2, typename T3>
+        static Vectorized loadu_unaligned(const T0* ptr0, const T1* ptr1, const T2* ptr2, const T3* ptr3) {
+            const __m256d vec_result = _mm256_set_pd(
+                static_cast<double>(*ptr3),
+                static_cast<double>(*ptr2),
+                static_cast<double>(*ptr1),
+                static_cast<double>(*ptr0)
+            );
+            return Vectorized(vec_result);
         }
 
         void store(double* ptr) const {

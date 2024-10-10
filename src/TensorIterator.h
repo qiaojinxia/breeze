@@ -44,7 +44,7 @@ namespace Breeze {
         static constexpr size_t ResultTypeSize = sizeof(ResultScalarType);
         static constexpr size_t ScalarTypesSize = sizeof ...(ScalarTypes);
         static constexpr size_t OptPutIndex  = ScalarTypesSize - 1;
-
+        static constexpr index_t PrefetchElements = CACHE_LINE_SIZE / sizeof(ResultScalarType) / SimdVrctorSize; // 以元素数量计的预读取数量
 
         struct OperandInfo {
             char* data{};
@@ -184,13 +184,12 @@ namespace Breeze {
 
         void analysis_memory_layout() {
             is_contiguous_ = true;
-
+            // 如果 所有操作的输入张量都是连续的 就标记连续
             for (const auto& op : operands_) {
-                is_contiguous_ &= is_contiguous(op.strides, shape_);
+                is_contiguous_ &= Utils::is_contiguous(op.strides, shape_);
             }
-
             is_reduce_dim_contiguous_ =  reduce_dim_size_ > 0 && operands_[0].strides[reduce_dim_size_ - 1] == 1;
-
+            // 针对最后一个维度连续 可以对连续的维度 拆分n次循环外部循环 和 内部连续的循环
             is_inner_contiguous_ = true;
             for (const auto& op : operands_) {
                 if (!op.strides.empty() && op.strides[0] != 1) {
@@ -292,7 +291,7 @@ namespace Breeze {
             } else if (is_inner_contiguous_) {
                 inner_contiguous_kernel_vec(scalar_op, vector_op);
             } else {
-                strided_kernel_vec(scalar_op);
+                strided_kernel_vec(scalar_op, vector_op);
             }
         }
 
@@ -527,7 +526,6 @@ namespace Breeze {
                             tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes, 0);
                             tile_data_strides[k] = 1;
                         }
-
                         for_each_func(tile_data_ptrs.data(), tile_data_strides.data(), 1);
                     }
                 }
@@ -535,32 +533,78 @@ namespace Breeze {
         }
 
 
-        template<typename ScalarOp>
-        void strided_kernel_vec(ScalarOp scalar_op) {
+        template<typename ScalarOp, typename VectorOp>
+        void strided_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
             const index_t numel = std::accumulate(shape_.begin(), shape_.end(),
                 1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(scalar_op, operands_) firstprivate(numel, shape_)
+            shared(scalar_op, vector_op, operands_) firstprivate(numel, shape_)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
+                alignas(64) std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize> tile_data_ptrs;
                 std::vector<index_t> tile_counter(shape_.size());
+
                 #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
                     Utils::index_to_counter(tile_start, tile_counter, shape_);
 
-                    for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-                        for (size_t k = 0; k < tile_data_ptrs.size(); ++k) {
-                            tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes, 0);
+                    for (index_t tile_idx = tile_start; tile_idx < tile_end; tile_idx += SimdVrctorSize) {
+                        const index_t remaining = std::min(SimdVrctorSize, tile_end - tile_idx);
+
+                        for (int i = 0; i < remaining; ++i) {
+                            for (size_t k = 0; k < ScalarTypesSize; ++k) {
+                                tile_data_ptrs[k][i] = operands_[k].data +
+                                    Utils::compute_offset(tile_counter, operands_[k].strides_bytes, 0);
+                            }
+                            Utils::increment_counter(tile_counter, shape_, 1);
                         }
-                        char* output_ptr = tile_data_ptrs[OptPutIndex];
-                        scalar_loop_impl(scalar_op, tile_data_ptrs, output_ptr, 1, 1, std::make_index_sequence<ScalarTypesSize - 1>{});
+
+                        if (remaining == SimdVrctorSize) {
+                            simd_loop_impl(vector_op, tile_data_ptrs, tile_data_ptrs[OptPutIndex], std::make_index_sequence<ScalarTypesSize - 1>{});
+                        } else {
+                            scalar_loop_impl(scalar_op, tile_data_ptrs, tile_data_ptrs[OptPutIndex], remaining, std::make_index_sequence<ScalarTypesSize - 1>{});
+                        }
                     }
                 }
             }
         }
 
+        template<typename VectorOp, size_t... Indices>
+        static void simd_loop_impl(VectorOp vector_op,
+                           const std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize>& data_ptrs,
+                           const std::array<char*, SimdVrctorSize>& output_ptrs,
+                           std::index_sequence<Indices...>) {
+            alignas(64) std::array<ResultScalarType, SimdVrctorSize> temp_output;
+            auto load_simd = [](const std::array<char*, SimdVrctorSize>& ptrs) {
+                alignas(64) ResultScalarType temp[SimdVrctorSize];
+                for (int i = 0; i < SimdVrctorSize; ++i) {
+                    temp[i] = *reinterpret_cast<const ResultScalarType*>(ptrs[i]);
+                }
+                return Vectorized<ResultScalarType>::loadu(temp);
+            };
+            std::array<Vectorized<ResultScalarType>, sizeof...(Indices)> input_vecs = {
+                load_simd(data_ptrs[Indices])...
+            };
+            // 调用vector_op
+            vector_op(temp_output.data(), input_vecs[Indices]...);
+            // 存储结果
+            for (size_t i = 0; i < SimdVrctorSize; ++i) {
+                *reinterpret_cast<ResultScalarType*>(output_ptrs[i]) = temp_output[i];
+            }
+        }
+
+        template<typename ScalarOp, size_t... Indices>
+        static void scalar_loop_impl(ScalarOp scalar_op,
+                             const std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize>& data_ptrs,
+                             const std::array<char*, SimdVrctorSize>& output_ptrs,
+                             const index_t size,
+                             std::index_sequence<Indices...>) {
+            for (index_t i = 0; i < size; ++i) {
+                scalar_op(reinterpret_cast<ResultScalarType*>(output_ptrs[i]),
+                          *reinterpret_cast<const ResultScalarType*>(data_ptrs[Indices][i])...);
+            }
+        }
 
     private:
         std::array<OperandInfo, sizeof ...(ScalarTypes)> operands_ ;
@@ -737,18 +781,17 @@ namespace Breeze {
         static void vectorized_loop_impl(VectorOp vector_op, const std::array<char*, ScalarTypesSize>& data_ptrs,
                               char* output_ptr, const index_t size, const index_t simd_vector_size, std::index_sequence<Indices...>) {
 
-            constexpr index_t prefetch_elements = CACHE_LINE_SIZE / sizeof(ResultScalarType) / SimdVrctorSize; // 以元素数量计的预读取数量
             index_t prefetch_counter = -1;
             for (index_t i = 0; i <= size - simd_vector_size; i += simd_vector_size) {
                 // 执行向量化操作 如果要实现不同类型操作可以在 loadu 添加转换
                 vector_op(reinterpret_cast<ResultScalarType*>(output_ptr) + i,
                    Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(data_ptrs[Indices]) + i)...);
                 // 每处理 prefetch_elements 个向量后进行一次预读取
-                if (++prefetch_counter == prefetch_elements) {
+                if (++prefetch_counter == PrefetchElements) {
                     prefetch_counter = -1;
-                    if (i < size - prefetch_elements) {
-                        Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(output_ptr) + i + prefetch_elements);
-                        (Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(data_ptrs[Indices]) + i + prefetch_elements), ...);
+                    if (i < size - PrefetchElements) {
+                        Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(output_ptr) + i + PrefetchElements);
+                        (Vectorized<ResultScalarType>::prefetch(reinterpret_cast<ResultScalarType*>(data_ptrs[Indices]) + i + PrefetchElements), ...);
                     }
                 }
             }
@@ -822,17 +865,6 @@ namespace Breeze {
                 return false;
             const auto it = std::find(config_.reduce_dims_.begin(), config_.reduce_dims_.end(), dim);
             return it != config_.reduce_dims_.end();
-        }
-
-        static bool is_contiguous(const std::vector<index_t>& strides, const std::vector<index_t>& shape) {
-            if (strides.size() <= 1) return true;
-            index_t expected_stride = 1;
-            for (index_t i = static_cast<index_t>(shape.size()) - 1; i >= 0; --i) {
-                if (shape[i] == 1) continue;
-                if (strides[i] != expected_stride) return false;
-                expected_stride *= shape[i];
-            }
-            return true;
         }
 
         [[nodiscard]] std::vector<index_t> invert_perm(const std::vector<index_t>& input) const {

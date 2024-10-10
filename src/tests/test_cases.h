@@ -1371,12 +1371,22 @@ public:
             // MEASURE_TIME(tensor->sum({0,1,2}););
             // const Tensor<float> *b = new CPUTensor<float>({2,4,1,4},4);
 
+
             {
-                const auto tensor1 = Tensor<float>::create_tensor({1,1,1},0.1);
-                const auto tensor2 = Tensor<float>::create_tensor({1,1,1},0.3);
-                auto c = *tensor1 * *tensor2;
+                const auto a = Tensor<float>::scalar(1);
+                const auto b = Tensor<float>::create_tensor({1000,1000,1000},5);
+
+                auto c = *a * *b;
                 std::cout << *c << std::endl;
+                // MEASURE_TIME(       auto c = *a * *b;);
             }
+
+            // {
+            //     const auto tensor1 = Tensor<float>::create_tensor({1,1,1},0.1);
+            //     const auto tensor2 = Tensor<float>::create_tensor({1,1,1},0.3);
+            //     auto c = *tensor1 * *tensor2;
+            //     std::cout << *c << std::endl;
+            // }
 
             // {
             //     const auto tensor1 = Tensor<float>::create_tensor({1000,1000,1000},0.1);
@@ -1400,7 +1410,7 @@ public:
             //
             // {
             //     const auto tensor1 = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
-            //     const auto m_tensor1 = tensor1->max({2});
+            //     const auto m_tensor1 = tensor1->max({0,1});
             //     std::cout << *m_tensor1 << std::endl;
             // }
             // // MEASURE_TIME(a - b);

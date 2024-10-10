@@ -63,6 +63,7 @@ namespace Breeze {
         virtual void operator*=(const TensorBase& rhs) = 0;
         virtual void operator/=(const TensorBase& rhs) = 0;
 
+
         [[nodiscard]] TensorState get_state() const { return state_; }
         void set_state(const TensorState new_state) { state_ = new_state; }
 
@@ -129,6 +130,8 @@ namespace Breeze {
         static std::shared_ptr<Tensor> randn(std::vector<index_t> shape,  Device device= Device::CPU);
         static std::shared_ptr<Tensor> vector(index_t size, Device device= Device::CPU);
         static std::shared_ptr<Tensor> scalar(ScalarType value, Device device= Device::CPU);
+        [[nodiscard]] bool is_scalar() const;
+
     };
 
     template<typename ScalarType>
@@ -177,7 +180,6 @@ namespace Breeze {
             return nullptr;
         }
     }
-
 
     template<typename ScalarType>
     std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::scalar(ScalarType value, const Device device) {
@@ -228,6 +230,11 @@ namespace Breeze {
     template<typename ScalarType>
     index_t Tensor<ScalarType>::num_elements() const {
         return shape.total_size();
+    }
+
+    template<typename ScalarType>
+    [[nodiscard]] bool Tensor<ScalarType>::is_scalar() const {
+        return shape.dims().empty();
     }
 
     template<typename ScalarType>
