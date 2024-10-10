@@ -54,9 +54,18 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator-(const TensorBase& rhs) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const = 0;
+
+
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keepdim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keepdim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keepdim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keepdim) = 0;
+
+
         [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> max(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims) = 0;
 
         virtual void operator+=(const TensorBase& rhs) = 0;
         virtual void operator-=(const TensorBase& rhs) = 0;

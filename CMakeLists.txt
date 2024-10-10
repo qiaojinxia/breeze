@@ -33,7 +33,7 @@ endif()
 
 # Set compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-Wall -Wextra -O3 -march=native)
+#    add_compile_options(-Wall -Wextra -O3 -march=native)
     if(IS_X86_64)
         add_compile_options(-mavx2)
     endif()
@@ -114,6 +114,7 @@ set(HEADERS
         src/ScalarType.h
         src/TensorIteratorConfig.cpp
         src/TensorIteratorConfig.h
+        src/tests/reduce_test.h
 )
 
 # Add executable

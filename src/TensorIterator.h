@@ -201,7 +201,8 @@ namespace Breeze {
 
 
         void resize_output() {
-            BREEZE_ASSERT(config_.is_reduction_, "resize_output should only be called for reduction operations");
+            if (!(!config_.keep_keepdim_ && config_.is_reduction_))
+                return;
 
             const size_t original_reduce_size = config_.reduce_dims_.size();
             const size_t input_dims = shape_.size();
@@ -324,8 +325,9 @@ namespace Breeze {
             }
         }
 
-        template<typename ReduceScalarOp, typename ReduceVectorOp, typename FinalReduceOp>
-        void reduce_strided_for_each(ReduceScalarOp reduce_scalar_op, ReduceVectorOp reduce_vector_op, FinalReduceOp final_reduce_op) {
+        template<typename InitValueFunc, typename ReduceScalarOp, typename ReduceVectorOp, typename FinalReduceOp>
+        void reduce_strided_for_each(InitValueFunc init_value_func, ReduceScalarOp reduce_scalar_op, ReduceVectorOp reduce_vector_op,
+            FinalReduceOp final_reduce_op) {
             std::vector<index_t> non_reduce_shape(shape_.size() - reduce_dim_size_);
             std::vector<index_t> reduce_shape;
             index_t non_reduce_size = 1;
@@ -345,14 +347,14 @@ namespace Breeze {
 
             #pragma omp parallel default(none) shared(reduce_size, reduce_shape, \
                 non_reduce_shape, non_reduce_size, reduce_vector_op, reduce_scalar_op, \
-                final_reduce_op, operands_, is_reduce_dim_contiguous_, final_reduce_size, simd_unaligned_start_offset)
+                final_reduce_op, init_value_func,operands_, is_reduce_dim_contiguous_, final_reduce_size, simd_unaligned_start_offset)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
                 std::array<ResultScalarType, SimdVrctorSize> local_reduce_vec = {};
                 std::vector<index_t> non_reduce_counter(non_reduce_shape.size());
 
                 auto process_tile = [&](const index_t i) {
-                    local_reduce_vec.fill(0);
+                    init_value_func(reinterpret_cast<ResultScalarType*>(&local_reduce_vec));
                     Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
                     for (size_t k = 0; k < operands_.size(); ++k) {
                         tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);

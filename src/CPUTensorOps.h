@@ -34,9 +34,10 @@ namespace Breeze {
         }
 
 
-        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> min(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<scalar_result>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const override;
 
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> sin(const Tensor<ScalarT1>& a) const override;
         [[nodiscard]] std::shared_ptr<Tensor<scalar_result>> cos(const Tensor<ScalarT1>& a) const override;

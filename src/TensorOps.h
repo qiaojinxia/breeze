@@ -37,9 +37,12 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> subtract(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> divide(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> multiply(const Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims) const = 0;
+
+        //reduce操作
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> min(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<scalar_ResultTypeype>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keepdim) const = 0;
 
         virtual void add_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
         virtual void subtract_inplace(Tensor<ScalarT1>& a, const Tensor<effective_ScalarT2>& b) const = 0;
