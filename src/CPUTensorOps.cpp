@@ -90,15 +90,15 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::sum(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keepdim) const {
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::sum(
+        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
             .set_reduce_dims(dims)
             .set_is_reduction(true)
-            .set_keep_keepdim(keepdim);
+            .set_keep_keep_dim(keep_dim);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
             [](ResultT* out_ptr) {
@@ -125,15 +125,15 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::max(
-      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keepdim) const {
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::max(
+      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
             .set_reduce_dims(dims)
             .set_is_reduction(true)
-            .set_keep_keepdim(keepdim);
+            .set_keep_keep_dim(keep_dim);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         constexpr ResultT init_value = std::numeric_limits<ResultT>::min();
         iter.reduce_strided_for_each(
@@ -161,15 +161,15 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::min(
-      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keepdim) const {
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::min(
+      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
             .set_reduce_dims(dims)
             .set_is_reduction(true)
-            .set_keep_keepdim(keepdim);
+            .set_keep_keep_dim(keep_dim);
         constexpr ResultT init_value = std::numeric_limits<ResultT>::max();
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         // 获取 ResultT 类型的最大可能值
@@ -198,8 +198,8 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::mean(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keepdim) const {
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::mean(
+        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         // 计算总元素数
@@ -211,7 +211,7 @@ namespace Breeze {
                .set_resize_outputs(true)
                .set_reduce_dims(dims)
                .set_is_reduction(true)
-               .set_keep_keepdim(keepdim);
+               .set_keep_keep_dim(keep_dim);
 
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
@@ -239,7 +239,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::sin(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::sin(
         const Tensor<ScalarT1> &a) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -257,7 +257,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::cos(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::cos(
         const Tensor<ScalarT1> &a) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -275,7 +275,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::tan(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::tan(
         const Tensor<ScalarT1> &a) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -293,7 +293,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::atan(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::atan(
         const Tensor<ScalarT1> &a) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -311,7 +311,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::pow(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::pow(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -328,7 +328,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::add(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::add(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -345,7 +345,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::subtract(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::subtract(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultType = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultType>>();
@@ -366,7 +366,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::divide(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::divide(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -383,7 +383,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::multiply(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::multiply(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
         using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultT>>();
@@ -400,7 +400,7 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::scalar_result>> CPUTensorOps<ScalarTypes...>::matmul(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::matmul(
         const Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
          // Get shapes of tensors a and b
         const std::vector<index_t> a_shape = a.get_shape().dims();

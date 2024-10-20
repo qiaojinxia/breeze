@@ -24,13 +24,13 @@ namespace Breeze {
         return *this;
     }
 
-    TensorIteratorConfig & TensorIteratorConfig::set_keep_keepdim(const bool keepdim) {
-        keep_keepdim_ = keepdim;
+    TensorIteratorConfig & TensorIteratorConfig::set_keep_keep_dim(const bool keep_dim) {
+        keep_keep_dim_ = keep_dim;
         return *this;
     }
 
-    TensorIteratorConfig & TensorIteratorConfig::set_check_mem_overlap(const bool check_mem_overla) {
-        check_mem_overlap_ = check_mem_overla;
+    TensorIteratorConfig & TensorIteratorConfig::set_check_mem_overlap(const bool check_mem_overlap) {
+        check_mem_overlap_ = check_mem_overlap;
         return *this;
     }
 

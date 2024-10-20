@@ -31,6 +31,19 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
+    CPUTensor<ScalarType>::CPUTensor(const std::vector<ScalarType>& elements ,const std::initializer_list<index_t> shape)
+        : Tensor<ScalarType>(Shape(shape), Device::CPU, TensorState::ALLOCATED),
+          memory_block_(std::make_shared<TensorStorage<ScalarType, CPUDevice>>(this->get_shape().total_size())) {
+        this->strides_ = this->get_shape().compute_strides();
+        ScalarType* dst_offset = this->mutable_data();
+        for (auto element : elements)
+        {
+            *(dst_offset++) = element;
+        }
+    }
+
+
+    template<typename ScalarType>
     CPUTensor<ScalarType>::CPUTensor(const CPUTensor& other)
         : Tensor<ScalarType>(Shape(std::vector<index_t>(other.get_shape().dims().begin(), other.get_shape().dims().end())), Device::CPU, TensorState::ALLOCATED),
           memory_block_(other.memory_block_) {
@@ -120,14 +133,14 @@ namespace Breeze {
     DEFINE_UNARY_OP(atan)
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims, const bool keepdim) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims, const bool keep_dim) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform sum on an empty tensor.");
         // 如果维度为空，则返回整个张量的和
         if (dims.empty()) {
             std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
-            return CPUTensorOps<ScalarType>::getInstance().sum(*this, all_dim, keepdim);
+            return CPUTensorOps<ScalarType>::getInstance().sum(*this, all_dim, keep_dim);
         }
         // 检查维度的有效性
         for (const auto& dim : dims) {
@@ -140,11 +153,11 @@ namespace Breeze {
         BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
             "Duplicate dimensions are not allowed in the sum operation.");
         // 执行求和操作
-        return CPUTensorOps<ScalarType>::getInstance().sum(*this, dims, keepdim);
+        return CPUTensorOps<ScalarType>::getInstance().sum(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
-    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims, const bool keepdim) {
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims, const bool keep_dim) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform max on an empty tensor.");
@@ -152,7 +165,7 @@ namespace Breeze {
         // 如果维度为空，则返回整个张量的最大值
         if (dims.empty()) {
             std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
-            return CPUTensorOps<ScalarType>::getInstance().max(*this, all_dim, keepdim);
+            return CPUTensorOps<ScalarType>::getInstance().max(*this, all_dim, keep_dim);
         }
 
         // 检查维度的有效性
@@ -168,11 +181,11 @@ namespace Breeze {
             "Duplicate dimensions are not allowed in the max operation.");
 
         // 执行最大值操作
-        return CPUTensorOps<ScalarType>::getInstance().max(*this, dims, keepdim);
+        return CPUTensorOps<ScalarType>::getInstance().max(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
-    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims, const bool keepdim) {
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims, const bool keep_dim) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform min on an empty tensor.");
@@ -180,7 +193,7 @@ namespace Breeze {
         // 如果维度为空，则返回整个张量的最小值
         if (dims.empty()) {
             std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
-            return CPUTensorOps<ScalarType>::getInstance().min(*this, all_dim, keepdim);
+            return CPUTensorOps<ScalarType>::getInstance().min(*this, all_dim, keep_dim);
         }
 
         // 检查维度的有效性
@@ -196,11 +209,11 @@ namespace Breeze {
             "Duplicate dimensions are not allowed in the min operation.");
 
         // 执行最小值操作
-        return CPUTensorOps<ScalarType>::getInstance().min(*this, dims, keepdim);
+        return CPUTensorOps<ScalarType>::getInstance().min(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
-   [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keepdim) {
+   [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keep_dim) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform mean on an empty tensor.");
@@ -208,7 +221,7 @@ namespace Breeze {
         // 如果维度为空，则返回整个张量的平均值
         if (dims.empty()) {
             std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
-            return CPUTensorOps<ScalarType>::getInstance().mean(*this, all_dim, keepdim);
+            return CPUTensorOps<ScalarType>::getInstance().mean(*this, all_dim, keep_dim);
         }
 
         // 检查维度的有效性
@@ -224,27 +237,27 @@ namespace Breeze {
             "Duplicate dimensions are not allowed in the mean operation.");
 
         // 执行平均值操作
-        return CPUTensorOps<ScalarType>::getInstance().mean(*this, dims, keepdim);
+        return CPUTensorOps<ScalarType>::getInstance().mean(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
-        return  sum(std::move(dims),false);
+        return sum(std::move(dims),false);
     }
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims) {
-        return  max(std::move(dims),false);
+        return max(std::move(dims),false);
     }
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims) {
-        return  mean(std::move(dims),false);
+        return mean(std::move(dims),false);
     }
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims) {
-        return  min(std::move(dims),false);
+        return min(std::move(dims),false);
     }
 
 
@@ -258,6 +271,7 @@ namespace Breeze {
     DEFINE_BINARY_OP_VOID(operator-=, subtract_inplace)
     DEFINE_BINARY_OP_VOID(operator*=, multiply_inplace)
     DEFINE_BINARY_OP_VOID(operator/=, divide_inplace)
+
 
     template<typename ScalarType>
     std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::randn(std::vector<index_t> shape) {
@@ -336,7 +350,7 @@ namespace Breeze {
 
         // 如果张量是连续的，直接创建新视图
         if (this->is_contiguous()) {
-            return this->view(std::move(final_shape));
+            return this->view(final_shape);
         }
 
         // 如果张量不是连续的，先创建副本再创建视图
@@ -1028,6 +1042,33 @@ namespace Breeze {
     std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::vector(const index_t size) {
         std::vector<index_t> shape = {size};
         return std::make_shared<CPUTensor>(std::move(shape));
+    }
+
+    template <typename ScalarType>
+    std::shared_ptr<CPUTensor<ScalarType>> CPUTensor<ScalarType>::vector(const std::string& tensor_elements)
+    {
+        std::vector<ScalarType> elements;
+        size_t start = 0, end = 0;
+        while ((end = tensor_elements.find(',', start)) != std::string::npos) {
+            std::string element = tensor_elements.substr(start, end - start);
+            try {
+                elements.push_back(static_cast<ScalarType>(std::stoi(element)));
+            } catch (const std::exception& e) {
+                BREEZE_ASSERT(false, "Failed to convert element to integer");
+            }
+            start = end + 1;
+        }
+        // 处理最后一个元素
+        std::string lastElement = tensor_elements.substr(start);
+        try {
+            elements.push_back(static_cast<ScalarType>(std::stoi(lastElement)));
+        } catch (const std::exception& e) {
+            BREEZE_ASSERT(false, "Failed to convert last element to integer");
+        }
+        BREEZE_ASSERT(!elements.empty(), "Tensor elements are empty");
+
+        auto shape = {static_cast<index_t>(elements.size())};
+        return std::make_shared<CPUTensor>(elements, shape);
     }
 
     template <typename ScalarType>

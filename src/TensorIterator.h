@@ -39,12 +39,12 @@ namespace Breeze {
     class TensorIterator {
     public:
         using ResultScalarType = LastScalarType<ScalarTypes...>;
-        static constexpr index_t SimdVrctorSize = Vectorized<ResultScalarType>::size();
+        static constexpr index_t SimdVectorSize = Vectorized<ResultScalarType>::size();
         //输出类型 的大小
         static constexpr size_t ResultTypeSize = sizeof(ResultScalarType);
         static constexpr size_t ScalarTypesSize = sizeof ...(ScalarTypes);
         static constexpr size_t OptPutIndex  = ScalarTypesSize - 1;
-        static constexpr index_t PrefetchElements = CACHE_LINE_SIZE / sizeof(ResultScalarType) / SimdVrctorSize; // 以元素数量计的预读取数量
+        static constexpr index_t PrefetchElements = CACHE_LINE_SIZE / sizeof(ResultScalarType) / SimdVectorSize; // 以元素数量计的预读取数量
 
         struct OperandInfo {
             char* data{};
@@ -179,7 +179,7 @@ namespace Breeze {
         }
 
         void init_default() {
-            if (config_.is_reduction_) reduce_dim_size_ = config_.reduce_dims_.size();
+            if (config_.is_reduction_) reduce_dim_count_ = config_.reduce_dims_.size();
         }
 
         void analysis_memory_layout() {
@@ -188,7 +188,7 @@ namespace Breeze {
             for (const auto& op : operands_) {
                 is_contiguous_ &= Utils::is_contiguous(op.strides, shape_);
             }
-            is_reduce_dim_contiguous_ =  reduce_dim_size_ > 0 && operands_[0].strides[reduce_dim_size_ - 1] == 1;
+            is_reduce_dim_contiguous_ =  reduce_dim_count_ > 0 && operands_[0].strides[reduce_dim_count_ - 1] == 1;
             // 针对最后一个维度连续 可以对连续的维度 拆分n次循环外部循环 和 内部连续的循环
             is_inner_contiguous_ = true;
             for (const auto& op : operands_) {
@@ -201,16 +201,16 @@ namespace Breeze {
 
 
         void resize_output() {
-            if (!(!config_.keep_keepdim_ && config_.is_reduction_))
+            if (!(!config_.keep_keep_dim_ && config_.is_reduction_))
                 return;
 
             const size_t original_reduce_size = config_.reduce_dims_.size();
             const size_t input_dims = shape_.size();
-            const size_t output_dims = input_dims - reduce_dim_size_;
+            const size_t output_dims = input_dims - reduce_dim_count_;
 
-            BREEZE_ASSERT(input_dims >= reduce_dim_size_,
+            BREEZE_ASSERT(input_dims >= reduce_dim_count_,
                           "Invalid reduction: input dimensions (", input_dims,
-                          ") must be greater than or equal to reduce dimensions (", reduce_dim_size_, ")");
+                          ") must be greater than or equal to reduce dimensions (", reduce_dim_count_, ")");
 
             auto final_shape = std::vector<index_t>();
             auto final_strides = std::vector<index_t>();
@@ -218,7 +218,7 @@ namespace Breeze {
             final_strides.reserve(output_dims);
 
             std::vector<index_t> original_shape = get_shape_from_tuple<0>();
-            std::vector<index_t> original_stides = get_tensor<0>().get_strides();
+            std::vector<index_t> original_strides = get_tensor<0>().get_strides();
 
             // 根据 perm_ 重新排列 final_shape 和 final_strides
             for (size_t i = 0; i < original_shape.size(); ++i) {
@@ -296,94 +296,107 @@ namespace Breeze {
             }
         }
 
-        template<typename ReduceScalarOp, typename ResultScalarType, typename ReduceVectorOp, size_t... Indices>
-        void reduce_non_contiguous(const char* data_ptr, const std::vector<index_t>& reduce_shape,
-                                   const std::vector<index_t>& strides_bytes, ReduceScalarOp reduce_scalar_op,
-                                   ReduceVectorOp reduce_vector_op, const index_t reduce_size, std::array<ResultScalarType, SimdVrctorSize> &local_reduce_vec,
-                                   const index_t simd_unaligned_start_offset, std::index_sequence<Indices...>) {
-            std::vector<index_t> reduce_counter(reduce_shape.size());
-            std::array<const char*, SimdVrctorSize> vec_data_ptrs;
+        template<typename ScalarReduceOp, typename ResultType, typename VectorReduceOp, size_t... Indices>
+        void reduce_non_contiguous(
+            const char* base_ptr,
+            const std::vector<index_t>& dimensions,
+            const std::vector<index_t>& strides_bytes,
+            ScalarReduceOp scalar_reduce,
+            VectorReduceOp vector_reduce,
+            const index_t total_elements,
+            std::array<ResultType, SimdVectorSize>& accumulator,
+            const index_t simd_remainder_start,
+            std::index_sequence<Indices...> ) {
+                std::vector<index_t> dimension_counters(dimensions.size());
+                std::array<const char*, SimdVectorSize> element_ptrs;
 
-            for (index_t j = 0; j  <= reduce_size - SimdVrctorSize; j += SimdVrctorSize) {
-                // Calculate offsets for SimdVectorSize elements at once
-                for (index_t i = 0; i < SimdVrctorSize && (j + i) < reduce_size; ++i) {
-                    Utils::index_to_counter(j + i, reduce_counter, reduce_shape);
-                    vec_data_ptrs[i] = data_ptr + Utils::compute_offset(reduce_counter, strides_bytes, 0);
+                for (index_t batch_start = 0; batch_start <= total_elements - SimdVectorSize; batch_start += SimdVectorSize) {
+                    // Calculate pointers for SimdVectorSize elements at once
+                    for (index_t i = 0; i < SimdVectorSize && (batch_start + i) < total_elements; ++i) {
+                        Utils::index_to_counter(batch_start + i, dimension_counters, dimensions);
+                        element_ptrs[i] = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
+                    }
+                    // Load and reduce vector data
+                    vector_reduce(
+                        reinterpret_cast<ResultType*>(&accumulator),
+                        Vectorized<ResultType>::loadu_unaligned(
+                            reinterpret_cast<const ResultType*>(element_ptrs[Indices])...
+                        )
+                    );
                 }
-                // Load and reduce vector data
-                reduce_vector_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec),
-                                 Vectorized<ResultScalarType>::loadu_unaligned(
-                                     reinterpret_cast<const ResultScalarType*>(vec_data_ptrs[Indices])...));
-            }
 
-            // Handle remaining elements that don't fit in a full SIMD vector
-            for (index_t j = simd_unaligned_start_offset; j < reduce_size; ++j) {
-                Utils::index_to_counter(j, reduce_counter, reduce_shape);
-                const char* scalar_ptr = data_ptr + Utils::compute_offset(reduce_counter, strides_bytes, 0);
-                reduce_scalar_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec) +
-                    (j % SimdVrctorSize) , *reinterpret_cast<const ResultScalarType*>(scalar_ptr));
-            }
+                // Handle remaining elements that don't fit in a full SIMD vector
+                for (index_t i = simd_remainder_start; i < total_elements; ++i) {
+                    Utils::index_to_counter(i, dimension_counters, dimensions);
+                    const char* scalar_ptr = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
+                    scalar_reduce(
+                        reinterpret_cast<ResultType*>(&accumulator) + (i % SimdVectorSize),
+                        *reinterpret_cast<const ResultType*>(scalar_ptr)
+                    );
+                }
         }
 
-        template<typename InitValueFunc, typename ReduceScalarOp, typename ReduceVectorOp, typename FinalReduceOp>
-        void reduce_strided_for_each(InitValueFunc init_value_func, ReduceScalarOp reduce_scalar_op, ReduceVectorOp reduce_vector_op,
-            FinalReduceOp final_reduce_op) {
-            std::vector<index_t> non_reduce_shape(shape_.size() - reduce_dim_size_);
-            std::vector<index_t> reduce_shape;
-            index_t non_reduce_size = 1;
-            index_t reduce_size = 1;
-            for (size_t i = 0; i < non_reduce_shape.size(); ++i) {
-                non_reduce_shape[i] = shape_[i + reduce_dim_size_];
-                non_reduce_size *= non_reduce_shape[i];
+        template<typename InitFunc, typename ScalarReduceOp, typename VectorReduceOp, typename FinalReduceOp>
+        void reduce_strided_for_each(InitFunc init_value, ScalarReduceOp scalar_reduce,
+            VectorReduceOp vector_reduce,FinalReduceOp final_reduce) {
+            // Ensure all necessary variables are defined and initialized
+            std::vector<index_t> outer_dimensions(shape_.size() - reduce_dim_count_);
+            std::vector<index_t> reduce_dimensions;
+            index_t outer_size = 1;
+            index_t total_reduce_elements = 1;
+
+            for (size_t i = 0; i < outer_dimensions.size(); ++i) {
+                outer_dimensions[i] = shape_[i + reduce_dim_count_];
+                outer_size *= outer_dimensions[i];
             }
 
-            for (size_t j = 0; j < reduce_dim_size_; ++j) {
-                reduce_shape.push_back(shape_[j]);
-                reduce_size *= reduce_shape[j];
+            for (size_t i = 0; i < reduce_dim_count_; ++i) {
+                reduce_dimensions.push_back(shape_[i]);
+                total_reduce_elements *= reduce_dimensions[i];
             }
 
-            const index_t simd_unaligned_start_offset = reduce_size - reduce_size % SimdVrctorSize;
-            const index_t final_reduce_size = reduce_size < SimdVrctorSize ? reduce_size : SimdVrctorSize;
+            const index_t simd_remainder_start = total_reduce_elements - total_reduce_elements % SimdVectorSize;
+            const index_t final_reduce_count = std::min(total_reduce_elements, static_cast<index_t>(SimdVectorSize));
 
-            #pragma omp parallel default(none) shared(reduce_size, reduce_shape, \
-                non_reduce_shape, non_reduce_size, reduce_vector_op, reduce_scalar_op, \
-                final_reduce_op, init_value_func,operands_, is_reduce_dim_contiguous_, final_reduce_size, simd_unaligned_start_offset)
+            #pragma omp parallel default(none) shared(total_reduce_elements, reduce_dimensions, \
+                outer_dimensions, outer_size, vector_reduce, scalar_reduce, \
+                final_reduce, init_value, operands_, is_reduce_dim_contiguous_, final_reduce_count, simd_remainder_start)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::array<ResultScalarType, SimdVrctorSize> local_reduce_vec = {};
-                std::vector<index_t> non_reduce_counter(non_reduce_shape.size());
+                alignas(64) std::array<char*, ScalarTypesSize> element_base_ptrs;
+                std::array<ResultScalarType, SimdVectorSize> accumulator = {};
+                std::vector<index_t> outer_counters(outer_dimensions.size());
 
-                auto process_tile = [&](const index_t i) {
-                    init_value_func(reinterpret_cast<ResultScalarType*>(&local_reduce_vec));
-                    Utils::index_to_counter(i, non_reduce_counter, non_reduce_shape);
+                auto process_tile = [&](const index_t tile_index) {
+                    init_value(reinterpret_cast<ResultScalarType*>(&accumulator));
+                    Utils::index_to_counter(tile_index, outer_counters, outer_dimensions);
                     for (size_t k = 0; k < operands_.size(); ++k) {
-                        tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(non_reduce_counter, operands_[k].strides_bytes);
+                        element_base_ptrs[k] = operands_[k].data + Utils::compute_offset(outer_counters, operands_[k].strides_bytes);
                     }
 
                     if (is_reduce_dim_contiguous_) {
-                        for (index_t j = 0; j <= reduce_size - SimdVrctorSize; j += SimdVrctorSize) {
-                            reduce_vector_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec),
-                                Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[0]) + j));
+                        for (index_t j = 0; j < total_reduce_elements - SimdVectorSize; j += SimdVectorSize) {
+                            vector_reduce(reinterpret_cast<ResultScalarType*>(&accumulator),
+                                Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
                         }
-                        for (index_t j = simd_unaligned_start_offset; j < reduce_size; ++j) {
-                            const index_t vec_offset = j % SimdVrctorSize;
-                            reduce_scalar_op(reinterpret_cast<ResultScalarType*>(&local_reduce_vec) + vec_offset,
-                                *(reinterpret_cast<ResultScalarType*>(tile_data_ptrs[0]) + j));
+                        for (index_t j = simd_remainder_start; j < total_reduce_elements; ++j) {
+                            const index_t vec_offset = j % SimdVectorSize;
+                            scalar_reduce(reinterpret_cast<ResultScalarType*>(&accumulator) + vec_offset,
+                                *(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
                         }
                     } else {
-                        reduce_non_contiguous(tile_data_ptrs[0], reduce_shape,
-                            operands_[0].strides_bytes, reduce_scalar_op, reduce_vector_op,
-                            reduce_size, local_reduce_vec,
-                            simd_unaligned_start_offset, std::make_index_sequence<SimdVrctorSize>{});
+                        reduce_non_contiguous(element_base_ptrs[0], reduce_dimensions,
+                            operands_[0].strides_bytes, scalar_reduce, vector_reduce,
+                            total_reduce_elements, accumulator,
+                            simd_remainder_start, std::make_index_sequence<SimdVectorSize>{});
                     }
 
-                    ResultScalarType tile_result = final_reduce_op(local_reduce_vec.data(), final_reduce_size);
-                    *reinterpret_cast<ResultScalarType*>(tile_data_ptrs[OptPutIndex]) = tile_result;
+                    ResultScalarType tile_result = final_reduce(accumulator.data(), final_reduce_count);
+                    *reinterpret_cast<ResultScalarType*>(element_base_ptrs[OptPutIndex]) = tile_result;
                 };
 
-                #pragma omp for schedule(dynamic, 1) nowait
-                for (index_t tile_start = 0; tile_start < non_reduce_size; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, non_reduce_size);
+                #pragma omp for schedule(static) nowait
+                for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
                     for (index_t i = tile_start; i < tile_end; ++i) {
                         process_tile(i);
                     }
@@ -391,27 +404,26 @@ namespace Breeze {
             }
         }
 
-
         template<typename ForEachFunc>
-        void contiguous_for_each(ForEachFunc for_each_func) {
+        void contiguous_for_each(ForEachFunc element_wise_op) {
             BREEZE_ASSERT(shape_.size() == 1,
                 "Invalid shape for contiguous_for_each: expected contiguous tensor");
-            const index_t numel = shape_.back();
+            const index_t total_elements = shape_.back();
             #pragma omp parallel default(none) \
-            shared(operands_, for_each_func) firstprivate(numel)
+            shared(operands_, element_wise_op) firstprivate(total_elements)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::array<index_t, ScalarTypesSize> tile_data_strides;
+                alignas(64) std::array<char*, ScalarTypesSize> tile_base_ptrs;
+                std::array<index_t, ScalarTypesSize> tile_strides;
                 #pragma omp for schedule(dynamic, 64)
-                for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
+                for (index_t tile_start = 0; tile_start < total_elements; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, total_elements);
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
                         BREEZE_ASSERT(operands_[k].strides_bytes.size() == 1,  "Invalid strides for operand ", k,
                             ": expected size 1, but got ", operands_[k].strides_bytes.size(), ". Operands must have 1-dimensional strides.");
-                        tile_data_ptrs[k] = operands_[k].data + tile_start * operands_[k].strides_bytes[0];
-                        tile_data_strides[k] = operands_[k].strides_bytes.back();
+                        tile_base_ptrs[k] = operands_[k].data + tile_start * operands_[k].strides_bytes[0];
+                        tile_strides[k] = operands_[k].strides_bytes.back();
                     }
-                    for_each_func(tile_data_ptrs.data(), tile_data_strides.data(), tile_end - tile_start);
+                    element_wise_op(tile_base_ptrs.data(), tile_strides.data(), tile_end - tile_start);
                 }
             }
         }
@@ -420,57 +432,56 @@ namespace Breeze {
         void contiguous_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
             BREEZE_ASSERT(shape_.size() == 1,
               "Invalid shape for contiguous_for_each: expected contiguous tensor");
-            const index_t numel = shape_.back();
+            const index_t total_elements = shape_.back();
 
             #pragma omp parallel default(none) \
-            shared(operands_, scalar_op, vector_op) firstprivate(numel, shape_)
+            shared(operands_, scalar_op, vector_op) firstprivate(total_elements, shape_)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
+                alignas(64) std::array<char*, ScalarTypesSize> tile_base_ptrs;
 
                 #pragma omp for schedule(static)
-                for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
+                for (index_t tile_start = 0; tile_start < total_elements; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, total_elements);
                     const index_t tile_elements = tile_end - tile_start;
 
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
                         BREEZE_ASSERT(operands_[k].strides_bytes.size() == 1 &&
                                       operands_[k].strides_bytes[0] == ResultTypeSize,
                             "Invalid strides for operand " + std::to_string(k));
-                        tile_data_ptrs[k] = operands_[k].data + tile_start * ResultTypeSize;
+                        tile_base_ptrs[k] = operands_[k].data + tile_start * ResultTypeSize;
                     }
-                    alignas(64) char* tile_output_ptr = tile_data_ptrs[OptPutIndex];
-                    op_loop(scalar_op, vector_op, tile_data_ptrs, tile_output_ptr, tile_elements);
+                    alignas(64) char* tile_output_ptr = tile_base_ptrs[OptPutIndex];
+                    op_loop(scalar_op, vector_op, tile_base_ptrs, tile_output_ptr, tile_elements);
                 }
             }
         }
 
-
         template<typename ForEachFunc>
-        void inner_contiguous_for_each(ForEachFunc for_each_func) {
+        void inner_contiguous_for_each(ForEachFunc element_wise_op) {
             const index_t inner_dim = shape_.back();
-            const index_t outer_dim = std::accumulate(shape_.begin() + 1,
+            const index_t outer_size = std::accumulate(shape_.begin() + 1,
                 shape_.end(), 1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(operands_, for_each_func) firstprivate(inner_dim, outer_dim, shape_)
+            shared(operands_, element_wise_op) firstprivate(inner_dim, outer_size, shape_)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::array<index_t, ScalarTypesSize> tile_data_strides;
-                std::vector<index_t> tile_counter(shape_.size() - 1);
+                alignas(64) std::array<char*, ScalarTypesSize> tile_base_ptrs;
+                std::array<index_t, ScalarTypesSize> tile_strides;
+                std::vector<index_t> outer_counters(shape_.size() - 1);
 
                 #pragma omp for schedule(static)
-                for (index_t tile_start = 0; tile_start < outer_dim; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_dim);
-                    Utils::index_to_counter(tile_start, tile_counter, shape_);
+                for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
+                    Utils::index_to_counter(tile_start, outer_counters, shape_);
 
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
                         BREEZE_ASSERT(operands_[k].strides[0] == 1, "Invalid strides for operand " + std::to_string(k));
-                        tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes);
-                        tile_data_strides[k] = operands_[k].strides[0];
+                        tile_base_ptrs[k] = operands_[k].data + Utils::compute_offset(outer_counters, operands_[k].strides_bytes);
+                        tile_strides[k] = operands_[k].strides[0];
                     }
 
                     for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-                        for_each_func(tile_data_ptrs.data(), tile_data_strides.data(), inner_dim);
+                        element_wise_op(tile_base_ptrs.data(), tile_strides.data(), inner_dim);
                     }
                 }
             }
@@ -479,93 +490,88 @@ namespace Breeze {
         template<typename ScalarOp, typename VectorOp>
         void inner_contiguous_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
             const index_t inner_size = shape_.back();
-            const index_t outer_size = std::accumulate(shape_.begin() + 1, shape_.end(), 1LL, std::multiplies<>());
+            const index_t outer_size = std::accumulate(shape_.begin() + 1, shape_.end(),
+                1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
             shared(operands_, scalar_op, vector_op) firstprivate(outer_size, inner_size, shape_)
             {
-                alignas(64) std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::vector<index_t> tile_counter(shape_.size() - 1);
+                alignas(64) std::array<char*, ScalarTypesSize> tile_base_ptrs;
+                std::vector<index_t> outer_counters(shape_.size() - 1);
 
                 #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
                     for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-                        Utils::index_to_counter(tile_idx, tile_counter, shape_);
+                        Utils::index_to_counter(tile_idx, outer_counters, shape_);
 
                         for (size_t k = 0; k < ScalarTypesSize; ++k) {
                             BREEZE_ASSERT(operands_[k].strides[0] == 1,  "Invalid strides for operand ", k,
-                            ": expected last stride 1, but got ", operands_[k].strides[0], ". Operands last stride must contiguous.");
-                            tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes);
-
+                            ": expected last stride 1, but got ", operands_[k].strides[0], ". Operands last stride must be contiguous.");
+                            tile_base_ptrs[k] = operands_[k].data + Utils::compute_offset(outer_counters, operands_[k].strides_bytes);
                         }
-                        alignas(64) char* output_ptr = tile_data_ptrs[OptPutIndex];
-                        op_loop(scalar_op, vector_op, tile_data_ptrs, output_ptr, inner_size);
+                        op_loop(scalar_op, vector_op, tile_base_ptrs, tile_base_ptrs[OptPutIndex], inner_size);
                     }
                 }
             }
         }
 
         template<typename ForEachFunc>
-        void strided_for_each(ForEachFunc for_each_func) {
-            const index_t numel = std::accumulate(shape_.begin(), shape_.end(),
+        void strided_for_each(ForEachFunc element_wise_op) {
+            const index_t total_elements = std::accumulate(shape_.begin(), shape_.end(),
                 1LL, std::multiplies<>());
-
             #pragma omp parallel default(none) \
-            shared(for_each_func, operands_) firstprivate(numel, shape_)
+            shared(element_wise_op, operands_) firstprivate(total_elements, shape_)
             {
-                alignas(64)  std::array<char*, ScalarTypesSize> tile_data_ptrs;
-                std::array<index_t, ScalarTypesSize> tile_data_strides;
-                std::vector<index_t> tile_counter(shape_.size());
-
+                alignas(64) std::array<char*, ScalarTypesSize> element_ptrs;
+                std::array<index_t, ScalarTypesSize> element_strides;
+                std::vector<index_t> element_counters(shape_.size());
                 #pragma omp for schedule(static)
-                for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
-                    Utils::index_to_counter(tile_start, tile_counter, shape_);
-
-                    for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
+                for (index_t tile_start = 0; tile_start < total_elements; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, total_elements);
+                    Utils::index_to_counter(tile_start, element_counters, shape_);
+                    for (index_t element_idx = tile_start; element_idx < tile_end; ++element_idx) {
                         for (size_t k = 0; k < ScalarTypesSize; ++k) {
-                            tile_data_ptrs[k] = operands_[k].data + Utils::compute_offset(tile_counter, operands_[k].strides_bytes, 0);
-                            tile_data_strides[k] = 1;
+                            element_ptrs[k] = operands_[k].data + Utils::compute_offset(element_counters, operands_[k].strides_bytes, 0);
+                            element_strides[k] = 1;
                         }
-                        for_each_func(tile_data_ptrs.data(), tile_data_strides.data(), 1);
+                        element_wise_op(element_ptrs.data(), element_strides.data(), 1);
                     }
                 }
             }
         }
 
-
-        template<typename ScalarOp, typename VectorOp>
+       template<typename ScalarOp, typename VectorOp>
         void strided_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
-            const index_t numel = std::accumulate(shape_.begin(), shape_.end(),
+            const index_t total_elements = std::accumulate(shape_.begin(), shape_.end(),
                 1LL, std::multiplies<>());
 
             #pragma omp parallel default(none) \
-            shared(scalar_op, vector_op, operands_) firstprivate(numel, shape_)
+            shared(scalar_op, vector_op, operands_) firstprivate(total_elements, shape_)
             {
-                alignas(64) std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize> tile_data_ptrs;
-                std::vector<index_t> tile_counter(shape_.size());
+                alignas(64) std::array<std::array<char*, SimdVectorSize>, ScalarTypesSize> tile_element_ptrs;
+                std::vector<index_t> element_counters(shape_.size());
 
                 #pragma omp for schedule(static)
-                for (index_t tile_start = 0; tile_start < numel; tile_start += TILE_SIZE) {
-                    const index_t tile_end = std::min(tile_start + TILE_SIZE, numel);
-                    Utils::index_to_counter(tile_start, tile_counter, shape_);
+                for (index_t tile_start = 0; tile_start < total_elements; tile_start += TILE_SIZE) {
+                    const index_t tile_end = std::min(tile_start + TILE_SIZE, total_elements);
+                    Utils::index_to_counter(tile_start, element_counters, shape_);
 
-                    for (index_t tile_idx = tile_start; tile_idx < tile_end; tile_idx += SimdVrctorSize) {
-                        const index_t remaining = std::min(SimdVrctorSize, tile_end - tile_idx);
+                    for (index_t element_idx = tile_start; element_idx < tile_end; element_idx += SimdVectorSize) {
+                        const index_t remaining = std::min(SimdVectorSize, tile_end - element_idx);
 
                         for (int i = 0; i < remaining; ++i) {
                             for (size_t k = 0; k < ScalarTypesSize; ++k) {
-                                tile_data_ptrs[k][i] = operands_[k].data +
-                                    Utils::compute_offset(tile_counter, operands_[k].strides_bytes, 0);
+                                tile_element_ptrs[k][i] = operands_[k].data +
+                                    Utils::compute_offset(element_counters, operands_[k].strides_bytes, 0);
                             }
-                            Utils::increment_counter(tile_counter, shape_, 1);
+                            Utils::increment_counter(element_counters, shape_, 1);
                         }
 
-                        if (remaining == SimdVrctorSize) {
-                            simd_loop_impl(vector_op, tile_data_ptrs, tile_data_ptrs[OptPutIndex], std::make_index_sequence<ScalarTypesSize - 1>{});
+                        if (remaining == SimdVectorSize) {
+                            simd_op_impl(vector_op, tile_element_ptrs, tile_element_ptrs[OptPutIndex], std::make_index_sequence<ScalarTypesSize - 1>{});
                         } else {
-                            scalar_loop_impl(scalar_op, tile_data_ptrs, tile_data_ptrs[OptPutIndex], remaining, std::make_index_sequence<ScalarTypesSize - 1>{});
+                            scalar_op_impl(scalar_op, tile_element_ptrs, tile_element_ptrs[OptPutIndex], remaining, std::make_index_sequence<ScalarTypesSize - 1>{});
                         }
                     }
                 }
@@ -573,38 +579,36 @@ namespace Breeze {
         }
 
         template<typename VectorOp, size_t... Indices>
-        static void simd_loop_impl(VectorOp vector_op,
-                           const std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize>& data_ptrs,
-                           const std::array<char*, SimdVrctorSize>& output_ptrs,
+        static void simd_op_impl(VectorOp vector_op,
+                           const std::array<std::array<char*, SimdVectorSize>, ScalarTypesSize>& input_ptrs,
+                           const std::array<char*, SimdVectorSize>& output_ptrs,
                            std::index_sequence<Indices...>) {
-            alignas(64) std::array<ResultScalarType, SimdVrctorSize> temp_output;
-            auto load_simd = [](const std::array<char*, SimdVrctorSize>& ptrs) {
-                alignas(64) ResultScalarType temp[SimdVrctorSize];
-                for (int i = 0; i < SimdVrctorSize; ++i) {
+            alignas(64) std::array<ResultScalarType, SimdVectorSize> temp_output;
+            auto load_simd = [](const std::array<char*, SimdVectorSize>& ptrs) {
+                alignas(64) ResultScalarType temp[SimdVectorSize];
+                for (int i = 0; i < SimdVectorSize; ++i) {
                     temp[i] = *reinterpret_cast<const ResultScalarType*>(ptrs[i]);
                 }
                 return Vectorized<ResultScalarType>::loadu(temp);
             };
-            std::array<Vectorized<ResultScalarType>, sizeof...(Indices)> input_vecs = {
-                load_simd(data_ptrs[Indices])...
+            std::array<Vectorized<ResultScalarType>, sizeof...(Indices)> input_vectors = {
+                load_simd(input_ptrs[Indices])...
             };
-            // 调用vector_op
-            vector_op(temp_output.data(), input_vecs[Indices]...);
-            // 存储结果
-            for (size_t i = 0; i < SimdVrctorSize; ++i) {
+            vector_op(temp_output.data(), input_vectors[Indices]...);
+            for (size_t i = 0; i < SimdVectorSize; ++i) {
                 *reinterpret_cast<ResultScalarType*>(output_ptrs[i]) = temp_output[i];
             }
         }
 
         template<typename ScalarOp, size_t... Indices>
-        static void scalar_loop_impl(ScalarOp scalar_op,
-                             const std::array<std::array<char*, SimdVrctorSize>, ScalarTypesSize>& data_ptrs,
-                             const std::array<char*, SimdVrctorSize>& output_ptrs,
+        static void scalar_op_impl(ScalarOp scalar_op,
+                             const std::array<std::array<char*, SimdVectorSize>, ScalarTypesSize>& input_ptrs,
+                             const std::array<char*, SimdVectorSize>& output_ptrs,
                              const index_t size,
                              std::index_sequence<Indices...>) {
             for (index_t i = 0; i < size; ++i) {
                 scalar_op(reinterpret_cast<ResultScalarType*>(output_ptrs[i]),
-                          *reinterpret_cast<const ResultScalarType*>(data_ptrs[Indices][i])...);
+                          *reinterpret_cast<const ResultScalarType*>(input_ptrs[Indices][i])...);
             }
         }
 
@@ -613,7 +617,7 @@ namespace Breeze {
         std::tuple<Tensor<ScalarTypes>*...> tensors_;
         std::vector<index_t> shape_{};
         std::vector<index_t> perm_{};
-        size_t reduce_dim_size_ = 0;
+        size_t reduce_dim_count_ = 0;
         bool is_contiguous_= false;
         bool is_inner_contiguous_= false;
         bool is_reduce_dim_contiguous_= false;
@@ -673,7 +677,7 @@ namespace Breeze {
                 // 聚合维度不参与 为了后面计算 需要保留信息
                 if (can_coalesce(last_dim, dim_i, std::make_index_sequence<sizeof... (Indices)>{})) {
                     if (dim_i < static_cast<index_t>(config_.reduce_dims_.size())) {
-                        --reduce_dim_size_;
+                        --reduce_dim_count_;
                     }
                     // 可以合并的情况
                     // 情况1：如果前一个维度的 shape 为 1
@@ -814,8 +818,8 @@ namespace Breeze {
         template<typename ScalarOp, typename VectorOp>
         void op_loop(ScalarOp scalar_op, VectorOp vector_op,
             const std::array<char*, ScalarTypesSize> &data_ptrs, char* output_ptr, const index_t size) {
-            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, SimdVrctorSize, std::make_index_sequence<ScalarTypesSize - 1>{});
-            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, SimdVrctorSize, std::make_index_sequence<ScalarTypesSize - 1>{});
+            vectorized_loop_impl(vector_op, data_ptrs, output_ptr, size, SimdVectorSize, std::make_index_sequence<ScalarTypesSize - 1>{});
+            scalar_loop_impl(scalar_op, data_ptrs, output_ptr, size, SimdVectorSize, std::make_index_sequence<ScalarTypesSize - 1>{});
         }
 
         void check_all_same_dtype() const{

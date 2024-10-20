@@ -55,11 +55,10 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator*(const TensorBase& rhs) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator/(const TensorBase& rhs) const = 0;
 
-
-        [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keepdim) = 0;
-        [[nodiscard]] virtual std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keepdim) = 0;
-        [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keepdim) = 0;
-        [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keepdim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keep_dim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keep_dim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) = 0;
 
 
         [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) = 0;
@@ -138,6 +137,7 @@ namespace Breeze {
         static std::shared_ptr<Tensor> arange(ScalarType start, ScalarType end, ScalarType step,  Device device= Device::CPU);
         static std::shared_ptr<Tensor> randn(std::vector<index_t> shape,  Device device= Device::CPU);
         static std::shared_ptr<Tensor> vector(index_t size, Device device= Device::CPU);
+        static std::shared_ptr<Tensor> vector(const std::string& tensor_elements, Device device= Device::CPU);
         static std::shared_ptr<Tensor> scalar(ScalarType value, Device device= Device::CPU);
         [[nodiscard]] bool is_scalar() const;
 
@@ -185,6 +185,15 @@ namespace Breeze {
     std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::vector(const index_t size, const Device device) {
         if (device == Device::CPU) {
             return CPUTensor<ScalarType>::vector(size);
+        } else {
+            return nullptr;
+        }
+    }
+
+    template<typename ScalarType>
+    std::shared_ptr<Tensor<ScalarType>> Tensor<ScalarType>::vector(const std::string& tensor_elements, const Device device) {
+        if (device == Device::CPU) {
+            return CPUTensor<ScalarType>::vector(tensor_elements);
         } else {
             return nullptr;
         }

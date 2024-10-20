@@ -100,9 +100,33 @@ static void test_Reduce() {
                         const std::vector<std::vector<float>> expected = {
                             {0., 5., 10., 15., 20., 25.},
                         };
-                        std::cout << *b << std::endl;
                         const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
                         BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,3}));
+                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
+
+            // min vector
+            {
+                        const auto a = Tensor<float>::vector("7,3,4,5");
+                        const auto b = a->min({0});
+                        const std::vector<std::vector<float>> expected = {
+                            {3},
+                        };
+                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({}));
+                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
+
+            // min vector 非连续
+            {
+                        const auto a = Tensor<float>::arange(0,30,1)
+                            ->view({2,3,5})->slice({"0:1:1","2:3:1","1:5:1"});
+                        const auto b = a->min({2});
+                        const std::vector<std::vector<float>> expected = {
+                            {11},
+                        };
+                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 1}));
                         COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
@@ -129,6 +153,5 @@ static void test_Reduce() {
                 const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(c);
                 COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
-
 }
 #endif //REDUCE_TEST_H

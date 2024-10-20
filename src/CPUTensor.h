@@ -15,6 +15,7 @@ namespace Breeze {
         explicit CPUTensor(Shape shape);
         explicit CPUTensor(std::vector<index_t> shape);
         CPUTensor(std::initializer_list<index_t> shape);
+        CPUTensor(const std::vector<ScalarType>& elements, std::initializer_list<index_t> shape);
         CPUTensor(Shape shape, ScalarType value);
         CPUTensor(const CPUTensor& other);
         CPUTensor(const CPUTensor& other, std::vector<index_t>&& shape);
@@ -31,10 +32,10 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> tan() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> atan() const override;
 
-        [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keepdim) override;
-        [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keepdim) override;
-        [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keepdim) override;
-        [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keepdim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keep_dim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keep_dim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) override;
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims) override;
@@ -99,7 +100,7 @@ namespace Breeze {
         static std::shared_ptr<CPUTensor> arange(ScalarType start, ScalarType end, ScalarType step);
         static std::shared_ptr<CPUTensor> scalar(ScalarType value);
         static std::shared_ptr<CPUTensor> vector(index_t size);
-
+        static std::shared_ptr<CPUTensor> vector(const std::string& tensor_elements);
     protected:
         std::shared_ptr<TensorStorage<ScalarType, CPUDevice>> memory_block_;
         static void combine_tensors_out(const std::vector<Tensor<ScalarType>*>& tensors, index_t dim, CPUTensor* result);
