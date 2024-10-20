@@ -213,7 +213,34 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
-   [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keep_dim) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::std(std::vector<index_t> dims, bool keep_dim, bool unbiased) {
+        const size_t ndim = this->shape.ndim();
+
+        // 如果维度为空，则返回整个张量的标准差
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().std(*this, all_dim, keep_dim, unbiased);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the std operation.");
+
+        // 执行标准差操作
+        return CPUTensorOps<ScalarType>::getInstance().std(*this, dims, keep_dim, unbiased);
+    }
+
+
+    template<typename ScalarType>
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keep_dim) {
         const index_t ndim = this->shape.ndim();
         // 检查张量是否为空
         BREEZE_ASSERT(ndim > 0, "Cannot perform mean on an empty tensor.");
@@ -260,6 +287,10 @@ namespace Breeze {
         return min(std::move(dims),false);
     }
 
+    template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::std(std::vector<index_t> dims) {
+        return std(std::move(dims), false, true);
+    }
 
     DEFINE_BINARY_OP(pow, pow)
     DEFINE_BINARY_OP(matmul, matmul)

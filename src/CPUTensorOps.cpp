@@ -90,9 +90,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::sum(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::sum(
         Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
@@ -125,9 +125,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::max(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::max(
       Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
@@ -161,9 +161,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::min(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::min(
       Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
@@ -198,9 +198,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::mean(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::mean(
         Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         // 计算总元素数
         index_t total_elements = 1;
@@ -239,9 +239,71 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::sin(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::std(
+        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
+        using ResultT = ScalarT1;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        auto cp_dims = std::vector<index_t>(dims.begin(), dims.end());;
+        // 计算总元素数
+        index_t total_elements = 1;
+        for (const auto dim : dims) {
+            total_elements *= a.get_shape().dims()[dim];
+        }
+
+        // 调整分母以计算无偏估计（N-1）或有偏估计（N）
+        index_t denominator = unbiased ? (total_elements - 1) : total_elements;
+
+        // 首先计算均值
+        std::shared_ptr<Tensor<ResultT>> mean_result = mean(a, cp_dims, true);
+        auto mean_tensor = dynamic_cast<Tensor<ScalarT2>*>(mean_result.get());
+
+        // 计算当前值减均值
+        subtract_inplace(a, *mean_tensor);
+
+        // 配置迭代器
+        const TensorIteratorConfig config = TensorIteratorConfig()
+            .set_resize_outputs(true)
+            .set_reduce_dims(dims)
+            .set_is_reduction(true)
+            .set_keep_keep_dim(keep_dim);
+
+        // 创建迭代器
+        auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
+
+        // 使用迭代器计算标准差
+        iter.reduce_strided_for_each(
+            [](ResultT* out_ptr) {
+                Vectorized<ResultT> value(0);
+                value.store(out_ptr);
+            },
+            // 累加每个元素与均值的平方差
+            [](ResultT *out_ptr, ResultT a_value) {
+                *out_ptr += a_value * a_value;
+            },
+            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                auto diff_sq_vec = a_vec * a_vec;
+                auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                auto sum_vec = out_vec + diff_sq_vec;
+                sum_vec.store(out_ptr);
+            },
+            // 计算方差，然后取平方根得到标准差
+            [denominator](const ResultT* data, const index_t size) {
+                ResultT sum_sq_diff = data[0];
+                for (index_t i = 1; i < size; ++i) {
+                    sum_sq_diff += data[i];
+                }
+                ResultT variance = sum_sq_diff / static_cast<ResultT>(denominator);
+                return std::sqrt(variance);
+            }
+        );
+
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::sin(
         const Tensor<ScalarT1> &a) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
         iter.cpu_kernel_vec(
@@ -257,9 +319,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::cos(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::cos(
         const Tensor<ScalarT1> &a) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
         iter.cpu_kernel_vec(
@@ -275,9 +337,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::tan(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::tan(
         const Tensor<ScalarT1> &a) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
         iter.cpu_kernel_vec(
@@ -293,9 +355,9 @@ namespace Breeze {
     }
 
     template<typename ... ScalarTypes>
-    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarResult>> CPUTensorOps<ScalarTypes...>::atan(
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::atan(
         const Tensor<ScalarT1> &a) const {
-        using ResultT = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
+        using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto iter = TensorIterator<ResultT, ResultT>::unary_op(*result, a);
         iter.cpu_kernel_vec(
@@ -508,7 +570,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     void CPUTensorOps<ScalarTypes...>::subtract_inplace(Tensor<ScalarT1> &a, const Tensor<ScalarT2> &b) const {
-        auto iter = TensorIterator<ScalarT1, ScalarT2>::unary_op(a, b);
+        auto iter = TensorIterator<ScalarT1, ScalarT1>::unary_op(a, b);
         iter.cpu_kernel_vec(
             [](ScalarT1 *out_ptr, ScalarT1 a_value) {
                 *out_ptr = *out_ptr - a_value;

@@ -36,11 +36,15 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims, bool keep_dim, bool unbiased) override;
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims) override;
+
+
 
         [[nodiscard]] std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> pow(const TensorBase& rhs) const override;

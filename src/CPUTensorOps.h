@@ -34,15 +34,17 @@ namespace Breeze {
         }
 
 
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarResult>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarResult>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarResult>> min(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarResult>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> min(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> std(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const override;
 
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> sin(const Tensor<ScalarT1>& a) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> cos(const Tensor<ScalarT1>& a) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> tan(const Tensor<ScalarT1>& a) const override;
-        [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> atan(const Tensor<ScalarT1>& a) const override;
+
+        [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> sin(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> cos(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> tan(const Tensor<ScalarT1>& a) const override;
+        [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> atan(const Tensor<ScalarT1>& a) const override;
 
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> pow(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> add(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
@@ -51,10 +53,10 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> multiply(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> matmul(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
 
-        void add_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
-        void subtract_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
-        void multiply_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
-        void divide_inplace(Tensor<ScalarT1>& a,  const Tensor<ScalarT2>& b) const override;
+        void add_inplace(Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        void subtract_inplace(Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        void multiply_inplace(Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
+        void divide_inplace(Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
 
 
     private:

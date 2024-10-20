@@ -53,6 +53,22 @@ static void test_Reduce() {
                 COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
+            // 非连续 sum
+            {
+                const auto a = Tensor<float>::arange(0,120,1)
+                            ->view({2,3,4,5})->slice({":1","2:3","2:4",":"});;
+                const auto b = a->sum({0,1});
+                auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 1, 2, 5}));
+                const std::vector<std::vector<float>> expected = {
+                    {50., 51., 52., 53., 54.},
+                    {55., 56., 57., 58., 59.},
+                };
+                tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2, 5}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
+
             {
                 const auto a = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
                 const auto b = a->sum({1,3}, true);
@@ -81,53 +97,53 @@ static void test_Reduce() {
             }
 
             {
-                        const auto a = Tensor<float>::arange(0,30,1)->view({2,3,5});
-                        const auto b = a->max({1});
-                        const std::vector<std::vector<float>> expected = {
-                            {10., 11., 12., 13., 14.},
-                            {25., 26., 27., 28., 29.},
-                        };
-                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
-                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,5}));
-                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+                const auto a = Tensor<float>::arange(0,30,1)->view({2,3,5});
+                const auto b = a->max({1});
+                const std::vector<std::vector<float>> expected = {
+                    {10., 11., 12., 13., 14.},
+                    {25., 26., 27., 28., 29.},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,5}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
             // min 测试案例
 
             {
-                        const auto a = Tensor<float>::arange(0,30,1)->view({2,3,5});
-                        const auto b = a->min({2});
-                        const std::vector<std::vector<float>> expected = {
-                            {0., 5., 10., 15., 20., 25.},
-                        };
-                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
-                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,3}));
-                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+                const auto a = Tensor<float>::arange(0,30,1)->view({2,3,5});
+                const auto b = a->min({2});
+                const std::vector<std::vector<float>> expected = {
+                    {0., 5., 10., 15., 20., 25.},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,3}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
             // min vector
             {
-                        const auto a = Tensor<float>::vector("7,3,4,5");
-                        const auto b = a->min({0});
-                        const std::vector<std::vector<float>> expected = {
-                            {3},
-                        };
-                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
-                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({}));
-                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+                const auto a = Tensor<float>::vector("7, 3, 4, 5");
+                const auto b = a->min({0});
+                const std::vector<std::vector<float>> expected = {
+                    {3},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
             // min vector 非连续
             {
-                        const auto a = Tensor<float>::arange(0,30,1)
+                const auto a = Tensor<float>::arange(0,30,1)
                             ->view({2,3,5})->slice({"0:1:1","2:3:1","1:5:1"});
-                        const auto b = a->min({2});
-                        const std::vector<std::vector<float>> expected = {
-                            {11},
-                        };
-                        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
-                        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 1}));
-                        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+                const auto b = a->min({2});
+                const std::vector<std::vector<float>> expected = {
+                    {11},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 1}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
             }
 
             {
@@ -144,14 +160,42 @@ static void test_Reduce() {
             }
 
             {
-                const auto tensor1 = Tensor<float>::create_tensor({1,1,1},0.1);
-                const auto tensor2 = Tensor<float>::create_tensor({1,1,1},0.3);
+                const auto a = Tensor<float>::scalar(3.3);
+                const auto b = Tensor<float>::arange(0,30,1)
+                    ->view({2,3,5})->slice({":1","1:3",":"});
+                const auto c = *a * *b;
                 const std::vector<std::vector<float>> expected = {
-                    {0.03},
+                    {16.5000, 19.8000, 23.1000, 26.4000, 29.7000},
+                    {33.0000, 36.3000, 39.6000, 42.9000, 46.2000},
                 };
-                auto c = *tensor1 * *tensor2;
-                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(c);
-                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(c->contiguous());
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1,2,5}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+
+          // 测试 std
+            {
+                const auto a = Tensor<float>::arange(0,30,1)
+                                    ->view({2,3,5})->slice({":1","1:3",":"});
+                const auto b = a->std({1});
+                const std::vector<std::vector<float>> expected = {
+                    {3.53553, 3.53553, 3.53553, 3.53553, 3.53553},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 5}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+            // 测试 std
+            {
+                const auto a = Tensor<float>::arange(0,30,1)
+                                            ->view({2,3,5})->slice({":1","1:3",":"});
+                const auto b = a->std({2});
+                const std::vector<std::vector<float>> expected = {
+                    {1.58114, 1.58114},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 2}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
             }
 }
 #endif //REDUCE_TEST_H

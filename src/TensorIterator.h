@@ -374,7 +374,7 @@ namespace Breeze {
                     }
 
                     if (is_reduce_dim_contiguous_) {
-                        for (index_t j = 0; j < total_reduce_elements - SimdVectorSize; j += SimdVectorSize) {
+                        for (index_t j = 0; j <= total_reduce_elements - SimdVectorSize; j += SimdVectorSize) {
                             vector_reduce(reinterpret_cast<ResultScalarType*>(&accumulator),
                                 Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
                         }
@@ -450,15 +450,14 @@ namespace Breeze {
                             "Invalid strides for operand " + std::to_string(k));
                         tile_base_ptrs[k] = operands_[k].data + tile_start * ResultTypeSize;
                     }
-                    alignas(64) char* tile_output_ptr = tile_base_ptrs[OptPutIndex];
-                    op_loop(scalar_op, vector_op, tile_base_ptrs, tile_output_ptr, tile_elements);
+                    op_loop(scalar_op, vector_op, tile_base_ptrs, tile_base_ptrs[OptPutIndex], tile_elements);
                 }
             }
         }
 
         template<typename ForEachFunc>
         void inner_contiguous_for_each(ForEachFunc element_wise_op) {
-            const index_t inner_dim = shape_.back();
+            const index_t inner_dim = shape_[0];
             const index_t outer_size = std::accumulate(shape_.begin() + 1,
                 shape_.end(), 1LL, std::multiplies<>());
 
@@ -489,7 +488,7 @@ namespace Breeze {
 
         template<typename ScalarOp, typename VectorOp>
         void inner_contiguous_kernel_vec(ScalarOp scalar_op, VectorOp vector_op) {
-            const index_t inner_size = shape_.back();
+            const index_t inner_size = shape_[0];
             const index_t outer_size = std::accumulate(shape_.begin() + 1, shape_.end(),
                 1LL, std::multiplies<>());
 
@@ -584,6 +583,9 @@ namespace Breeze {
                            const std::array<char*, SimdVectorSize>& output_ptrs,
                            std::index_sequence<Indices...>) {
             alignas(64) std::array<ResultScalarType, SimdVectorSize> temp_output;
+            for (size_t i = 0; i < SimdVectorSize; ++i) {
+                temp_output[i] = *reinterpret_cast<const ResultScalarType*>(output_ptrs[i]);
+            }
             auto load_simd = [](const std::array<char*, SimdVectorSize>& ptrs) {
                 alignas(64) ResultScalarType temp[SimdVectorSize];
                 for (int i = 0; i < SimdVectorSize; ++i) {

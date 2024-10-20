@@ -87,6 +87,15 @@ namespace Breeze {
             return Vectorized(vmaxq_f32(a.values, b.values));
         }
 
+        [[nodiscard]] Vectorized min(const Vectorized& other) const {
+            return Vectorized(vminq_f32(values, other.values));
+        }
+
+        static Vectorized min(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(vminq_f32(a.values, b.values));
+        }
+
+
         static Vectorized loadu(const float* ptr) {
             return Vectorized(vld1q_f32(ptr));
         }
@@ -172,6 +181,15 @@ namespace Breeze {
         static Vectorized max(const Vectorized& a, const Vectorized& b) {
             return Vectorized(vmaxq_f64(a.values, b.values));
         }
+
+        [[nodiscard]] Vectorized min(const Vectorized& other) const {
+            return Vectorized(vminq_f64(values, other.values));
+        }
+
+        static Vectorized min(const Vectorized& a, const Vectorized& b) {
+            return Vectorized(vminq_f64(a.values, b.values));
+        }
+
 
         static Vectorized loadu(const char* ptr) {
             return Vectorized(vld1q_f64(reinterpret_cast<const double*>(ptr)));
