@@ -55,6 +55,31 @@ namespace Breeze {
             return Vectorized(Sleef_atanf8_u10avx2(values));
         }
 
+        [[nodiscard]] Vectorized log() const {
+            return Vectorized(Sleef_logf8_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized log2() const {
+            return Vectorized(Sleef_log2f8_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized log10() const {
+            return Vectorized(Sleef_log10f8_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized exp() const {
+            return Vectorized(Sleef_expf8_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized abs() const {
+            return Vectorized(Sleef_fabsf8_avx2(values));
+        }
+
+        [[nodiscard]] Vectorized sqrt() const {
+            return Vectorized(Sleef_sqrtf8_avx2(values));
+        }
+
+
         static void prefetch(const float* ptr) {
             __builtin_prefetch(ptr, 0, 3);
         }
@@ -163,6 +188,31 @@ namespace Breeze {
 
         [[nodiscard]] Vectorized atan() const {
             return Vectorized(Sleef_atand4_u10avx2(values));
+        }
+
+
+        [[nodiscard]] Vectorized log() const {
+            return Vectorized(Sleef_logd4_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized log2() const {
+            return Vectorized(Sleef_log2d4_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized log10() const {
+            return Vectorized(Sleef_log10d4_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized exp() const {
+            return Vectorized(Sleef_expd4_u10avx2(values));
+        }
+
+        [[nodiscard]] Vectorized abs() const {
+            return Vectorized(Sleef_fabsd4_avx2(values));
+        }
+
+        [[nodiscard]] Vectorized sqrt() const {
+            return Vectorized(Sleef_sqrtd4_avx2(values));
         }
 
         static void prefetch(const double* ptr) {

@@ -236,10 +236,11 @@ public:
         return sequence;
     }
 
-    static void index_to_counter(index_t index, std::vector<index_t>& counter, const std::vector<index_t>& index_shape) {
+    static void index_to_counter(index_t index, std::vector<index_t>& counter,
+        const std::vector<index_t>& index_shape, const index_t offset = 0) {
         for (index_t i = 0 ; i < static_cast<index_t>(counter.size()); ++i) {
-            counter[i] = index % index_shape[i];
-            index /= index_shape[i];
+            counter[i] = index % index_shape[i + offset];
+            index /= index_shape[i + offset];
         }
     }
 

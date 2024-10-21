@@ -31,19 +31,28 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<TensorBase> cos() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> tan() const override;
         [[nodiscard]] std::shared_ptr<TensorBase> atan() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> log() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> log2() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> log10() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> exp() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> sqrt() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> rsqrt() const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> abs() const override;
+
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) override;
         [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims, bool keep_dim, bool unbiased) override;
+        [[nodiscard]] std::shared_ptr<TensorBase> var(std::vector<index_t> dims, bool keep_dim, bool unbiased) override;
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims) override;
-
+        [[nodiscard]] std::shared_ptr<TensorBase> var(std::vector<index_t> dims) override;
 
 
         [[nodiscard]] std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const override;

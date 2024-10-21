@@ -13,6 +13,17 @@
 
 using namespace Breeze;
 static void test_Reduce() {
+
+            // sum 测试标量
+            {
+                const auto a = Tensor<float>::scalar(1);
+                const std::vector<std::vector<float>> expected = {
+                    {1.}
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
             // sum 测试案例
             {
                 const auto a = Tensor<float>::arange(0,120,1)->view({2,3,4,5});
@@ -173,7 +184,21 @@ static void test_Reduce() {
                 COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
             }
 
-          // 测试 std
+            {
+                const auto a = Tensor<float>::arange(0,30,1)
+                                    ->view({2,3,5})->slice({":1","1:3",":"});
+                auto b = a->mean({1});
+                auto c = *a  - *b;
+                const std::vector<std::vector<float>> expected = {
+                    {-2.5000, -2.5000, -2.5000, -2.5000, -2.5000},
+                    {2.5000, 2.5000, 2.5000, 2.5000, 2.5000},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(c);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 2, 5}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+
+            // 测试 std
             {
                 const auto a = Tensor<float>::arange(0,30,1)
                                     ->view({2,3,5})->slice({":1","1:3",":"});
@@ -197,5 +222,44 @@ static void test_Reduce() {
                 BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({1, 2}));
                 COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
             }
+
+            // 测试 向量 var
+            {
+                const auto a = Tensor<float>::arange(0,30,1);
+                const auto b = a->var({});
+                const std::vector<std::vector<float>> expected = {
+                    {77.5000},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+
+            // 测试 var
+            {
+                const auto a = Tensor<float>::arange(0,40,1)
+                                                               ->view({5,8})->slice({"1:",":4"});
+                const auto b = a->var({1});
+                const std::vector<std::vector<float>> expected = {
+                    {1.66667, 1.66667, 1.66667, 1.66667},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({4}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+
+            // 测试 var
+            {
+                const auto a = Tensor<float>::arange(0,30,1)
+                                                    ->view({10,3});
+                const auto b = a->var({0});
+                const std::vector<std::vector<float>> expected = {
+                    {82.5000, 82.5000, 82.5000},
+                };
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({3}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
+            }
+
 }
 #endif //REDUCE_TEST_H

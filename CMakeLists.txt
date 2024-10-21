@@ -114,7 +114,8 @@ set(HEADERS
         src/ScalarType.h
         src/TensorIteratorConfig.cpp
         src/TensorIteratorConfig.h
-        src/tests/reduce_test.h
+        src/tests/reduce_tests.h
+        src/tests/math_tests.h
 )
 
 # Add executable

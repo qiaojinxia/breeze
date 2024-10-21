@@ -445,9 +445,6 @@ namespace Breeze {
                     const index_t tile_elements = tile_end - tile_start;
 
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
-                        BREEZE_ASSERT(operands_[k].strides_bytes.size() == 1 &&
-                                      operands_[k].strides_bytes[0] == ResultTypeSize,
-                            "Invalid strides for operand " + std::to_string(k));
                         tile_base_ptrs[k] = operands_[k].data + tile_start * ResultTypeSize;
                     }
                     op_loop(scalar_op, vector_op, tile_base_ptrs, tile_base_ptrs[OptPutIndex], tile_elements);
@@ -471,7 +468,7 @@ namespace Breeze {
                 #pragma omp for schedule(static)
                 for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
-                    Utils::index_to_counter(tile_start, outer_counters, shape_);
+                    Utils::index_to_counter(tile_start, outer_counters, shape_, 1);
 
                     for (size_t k = 0; k < ScalarTypesSize; ++k) {
                         BREEZE_ASSERT(operands_[k].strides[0] == 1, "Invalid strides for operand " + std::to_string(k));
@@ -502,8 +499,7 @@ namespace Breeze {
                 for (index_t tile_start = 0; tile_start < outer_size; tile_start += TILE_SIZE) {
                     const index_t tile_end = std::min(tile_start + TILE_SIZE, outer_size);
                     for (index_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-                        Utils::index_to_counter(tile_idx, outer_counters, shape_);
-
+                        Utils::index_to_counter(tile_idx, outer_counters, shape_, 1);
                         for (size_t k = 0; k < ScalarTypesSize; ++k) {
                             BREEZE_ASSERT(operands_[k].strides[0] == 1,  "Invalid strides for operand ", k,
                             ": expected last stride 1, but got ", operands_[k].strides[0], ". Operands last stride must be contiguous.");

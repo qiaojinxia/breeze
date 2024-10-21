@@ -48,6 +48,14 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<TensorBase> cos() const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> tan() const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> atan() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> log() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> log10() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> log2() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> exp() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> sqrt() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> rsqrt() const = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> abs() const = 0;
+
         [[nodiscard]] virtual std::shared_ptr<TensorBase> pow(const TensorBase& other) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> operator+(const TensorBase& rhs) const = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> matmul(const TensorBase& rhs) const = 0;
@@ -60,12 +68,14 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> std(std::vector<index_t> dims, bool keep_dim, bool unbiased) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> var(std::vector<index_t> dims, bool keep_dim, bool unbiased) = 0;
 
         [[nodiscard]] virtual std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> max(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> mean(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> min(std::vector<index_t> dims) = 0;
         [[nodiscard]] virtual std::shared_ptr<TensorBase> std(std::vector<index_t> dims) = 0;
+        [[nodiscard]] virtual std::shared_ptr<TensorBase> var(std::vector<index_t> dims) = 0;
 
         virtual void operator+=(const TensorBase& rhs) = 0;
         virtual void operator-=(const TensorBase& rhs) = 0;
