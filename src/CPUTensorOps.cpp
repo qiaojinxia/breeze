@@ -137,7 +137,7 @@ namespace Breeze {
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         constexpr ResultT init_value = std::numeric_limits<ResultT>::min();
         iter.reduce_strided_for_each(
-            [init_value](ResultT* out_ptr) {
+            [](ResultT* out_ptr) {
                 Vectorized<ResultT> value(init_value);
                 value.store(out_ptr);
             },
@@ -174,7 +174,7 @@ namespace Breeze {
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         // 获取 ResultT 类型的最大可能值
         iter.reduce_strided_for_each(
-            [init_value](ResultT* out_ptr) {
+            [](ResultT* out_ptr) {
                Vectorized<ResultT> value(init_value);
                value.store(out_ptr);
             },
@@ -228,8 +228,8 @@ namespace Breeze {
                 sum_vec.store(out_ptr);
             },
             [total_elements](const ResultT* data, const index_t size) {
-                ResultT sum_val = 0;
-                for (index_t i = 0; i < size; ++i) {
+                ResultT sum_val = data[0];
+                for (index_t i = 1; i < size; ++i) {
                     sum_val += data[i];
                 }
                 return sum_val / static_cast<ResultT>(total_elements);

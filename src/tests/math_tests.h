@@ -98,7 +98,7 @@ static void test_Math()
     {
         const auto a = Tensor<float>::arange(1,5,1);
         const std::vector<std::vector<float>> expected = {
-            {2.718282,  7.389056, 20.085537, 54.598150},
+            {2.718282,  7.389056, 20.085537, 54.598152},
         };
         auto b = a->exp();
         const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);

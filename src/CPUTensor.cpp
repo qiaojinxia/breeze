@@ -233,7 +233,7 @@ namespace Breeze {
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::std(std::vector<index_t> dims, bool keep_dim, bool unbiased) {
-        const size_t ndim = this->shape.ndim();
+        const index_t ndim = this->shape.ndim();
 
         BREEZE_ASSERT(ndim > 0, "Cannot perform std on a scalar tensor as it contains only one element with no spread of values.");
 
@@ -261,7 +261,7 @@ namespace Breeze {
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::var(std::vector<index_t> dims, bool keep_dim, bool unbiased) {
-        const size_t ndim = this->shape.ndim();
+        const index_t ndim = this->shape.ndim();
 
         BREEZE_ASSERT(ndim > 0, "Cannot perform var on a scalar tensor as it contains only one element, which by definition has a variance of zero.");
 

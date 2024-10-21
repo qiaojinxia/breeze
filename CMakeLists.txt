@@ -116,6 +116,7 @@ set(HEADERS
         src/TensorIteratorConfig.h
         src/tests/reduce_tests.h
         src/tests/math_tests.h
+        src/tests/performance_test.h
 )
 
 # Add executable

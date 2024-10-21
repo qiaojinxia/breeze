@@ -46,31 +46,55 @@ namespace Breeze {
         }
 
         [[nodiscard]] Vectorized sin() const {
-            return Vectorized(Sleef_sinf4_u10(values));
+            return Vectorized(Sleef_sinf4_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized cos() const {
-            return Vectorized(Sleef_cosf4_u10(values));
+            return Vectorized(Sleef_cosf4_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized pow(const Vectorized& exponents) const {
-            return Vectorized(Sleef_powf4_u10(values, exponents.values));
+            return Vectorized(Sleef_powf4_u10advsimd(values, exponents.values));
         }
 
         [[nodiscard]] Vectorized tan() const {
-            return Vectorized(Sleef_tanf4_u10(values));
+            return Vectorized(Sleef_tanf4_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized atan() const {
-            return Vectorized(Sleef_atanf4_u10(values));
+            return Vectorized(Sleef_atanf4_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log() const {
+            return Vectorized(Sleef_logf4_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log2() const {
+            return Vectorized(Sleef_log2f4_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log10() const {
+            return Vectorized(Sleef_log10f4_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized exp() const {
+            return Vectorized(Sleef_expf4_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized abs() const {
+            return Vectorized(Sleef_fabsf4(values));
+        }
+
+        [[nodiscard]] Vectorized sqrt() const {
+            return Vectorized(Sleef_sqrtf4_u05advsimd(values));
         }
 
         [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {
             const float32x4_t vec_two_pi = vdupq_n_f32(2.0f * M_PI);
             const float32x4_t vec_minus_two = vdupq_n_f32(-2.0f);
-            const float32x4_t vec_log_u1 = Sleef_logf4_u10(v1.values);
-            const float32x4_t vec_sqrt = Sleef_sqrtf4_u05(vmulq_f32(vec_minus_two, vec_log_u1));
-            const float32x4_t vec_cos = Sleef_cosf4_u10(vmulq_f32(vec_two_pi, v2.values));
+            const float32x4_t vec_log_u1 = Sleef_logf4_u10advsimd(v1.values);
+            const float32x4_t vec_sqrt = Sleef_sqrtf4_u05advsimd(vmulq_f32(vec_minus_two, vec_log_u1));
+            const float32x4_t vec_cos = Sleef_cosf4_u10advsimd(vmulq_f32(vec_two_pi, v2.values));
             const float32x4_t vec_result = vmulq_f32(vec_sqrt, vec_cos);
             return Vectorized(vec_result);
         }
@@ -145,31 +169,55 @@ namespace Breeze {
         }
 
         [[nodiscard]] Vectorized sin() const {
-            return Vectorized(Sleef_sind2_u10(values));
+            return Vectorized(Sleef_sind2_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized cos() const {
-            return Vectorized(Sleef_cosd2_u10(values));
+            return Vectorized(Sleef_cosd2_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized pow(const Vectorized& exponents) const {
-            return Vectorized(Sleef_powd2_u10(values, exponents.values));
+            return Vectorized(Sleef_powd2_u10advsimd(values, exponents.values));
         }
 
         [[nodiscard]] Vectorized tan() const {
-            return Vectorized(Sleef_tand2_u10(values));
+            return Vectorized(Sleef_tand2_u10advsimd(values));
         }
 
         [[nodiscard]] Vectorized atan() const {
-            return Vectorized(Sleef_atand2_u10(values));
+            return Vectorized(Sleef_atand2_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log() const {
+            return Vectorized(Sleef_logd2_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log2() const {
+            return Vectorized(Sleef_log2d2_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized log10() const {
+            return Vectorized(Sleef_log10d2_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized exp() const {
+            return Vectorized(Sleef_expd2_u10advsimd(values));
+        }
+
+        [[nodiscard]] Vectorized abs() const {
+            return Vectorized(Sleef_fabsd2(values));
+        }
+
+        [[nodiscard]] Vectorized sqrt() const {
+            return Vectorized(Sleef_sqrtd2_u05advsimd(values));
         }
 
         [[nodiscard]] static Vectorized randn(const Vectorized& v1, const Vectorized& v2) {
             const float64x2_t vec_two_pi = vdupq_n_f64(2.0 * M_PI);
             const float64x2_t vec_minus_two = vdupq_n_f64(-2.0);
-            const float64x2_t vec_log_u1 = Sleef_logd2_u10(v1.values);
-            const float64x2_t vec_sqrt = Sleef_sqrtd2_u05(vmulq_f64(vec_minus_two, vec_log_u1));
-            const float64x2_t vec_cos = Sleef_cosd2_u10(vmulq_f64(vec_two_pi, v2.values));
+            const float64x2_t vec_log_u1 = Sleef_logd2_u10advsimd(v1.values);
+            const float64x2_t vec_sqrt = Sleef_sqrtd2_u05advsimd(vmulq_f64(vec_minus_two, vec_log_u1));
+            const float64x2_t vec_cos = Sleef_cosd2_u10advsimd(vmulq_f64(vec_two_pi, v2.values));
             const float64x2_t vec_result = vmulq_f64(vec_sqrt, vec_cos);
             return Vectorized(vec_result);
         }
