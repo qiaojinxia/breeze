@@ -33,10 +33,10 @@ namespace Breeze {
             return instance;
         }
 
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> sum(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> max(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> min(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
-        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> mean(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> sum(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
+        [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> mean(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const override;
         [[nodiscard]]  std::shared_ptr<Tensor<ScalarT1>> std(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> var(Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> sin(const Tensor<ScalarT1>& a) const override;
@@ -50,7 +50,7 @@ namespace Breeze {
         [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> sqrt(const Tensor<ScalarT1>& a) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> rsqrt(const Tensor<ScalarT1>& a) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> abs(const Tensor<ScalarT1>& a) const override;
-
+        [[nodiscard]] std::shared_ptr<Tensor<ScalarT1>> norm(const Tensor<ScalarT1> &a, std::vector<index_t> &dims, int p, bool keep_dim) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> pow(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> add(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;
         [[nodiscard]] std::shared_ptr<Tensor<ScalarResult>> subtract(const Tensor<ScalarT1>& a, const Tensor<ScalarT2>& b) const override;

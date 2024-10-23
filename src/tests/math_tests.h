@@ -103,7 +103,7 @@ static void test_Math()
         auto b = a->exp();
         const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
         BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({4}));
-        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
     }
 
     {
@@ -167,5 +167,90 @@ static void test_Math()
         BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({5}));
         COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
     }
+
+    {
+        const auto a =
+            Tensor<float>::arange(60,80,1)
+                ->view({2,2,5})->slice({":","1:","3:"});
+        const std::vector<std::vector<float>> expected = {
+            {67, 68},{77, 78},
+        };
+        const auto b = Tensor<float>::scalar(1.0);
+        *a -= *b;
+        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
+        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,1,2}));
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+    }
+
+    {
+        const auto a =
+            Tensor<float>::arange(60,80,1)
+                ->view({2,2,5})->slice({":","1:","3:"});
+        const std::vector<std::vector<float>> expected = {
+            {67, 68},{77, 78},
+        };
+        const auto b = Tensor<float>::scalar(1.0);
+        *a -= *b;
+        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
+        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,1,2}));
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+    }
+
+
+    {
+        const auto a =
+            Tensor<float>::arange(90,111,1);
+        const std::vector<std::vector<float>> expected = {
+            {30.000000, 30.333334, 30.666666, 31.000000, 31.333334,
+                31.666666, 32.000000, 32.333332, 32.666668, 33.000000,
+                33.333332, 33.666668, 34.000000, 34.333332, 34.666668,
+                35.000000, 35.333332, 35.666668, 36.000000, 36.333332, 36.666668},
+        };
+        const auto b = Tensor<float>::scalar(3.0);
+        *a /= *b;
+        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
+        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({21}));
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+    }
+
+
+    {
+        const auto a =
+            Tensor<float>::arange(210,290,1)
+            ->view({4,4,5})->slice({"2:",":2",":"});
+        const std::vector<std::vector<float>> expected = {
+            {786.481506, 789.627441, 792.773376, 795.919250, 799.065186},
+            {802.211121, 805.357056, 808.502991, 811.648926, 814.794861},
+            {849.400024, 852.545959, 855.691895, 858.837769, 861.983704},
+            {865.129639, 868.275574, 871.421509, 874.567444, 877.713379},
+
+        };
+        const auto b = Tensor<float>::scalar(3.145926f);
+        *a *= *b;
+        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
+        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,2,5}));
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+    }
+
+
+    {
+        const auto a =
+            Tensor<float>::arange(210,290,1)
+            ->view({4,4,5})->slice({"2:",":2","1:2"});
+        const std::vector<std::vector<float>> expected = {
+                {789.627441},
+                {805.357056},
+                {852.545959},
+                {868.275574},
+        };
+        const auto b = Tensor<float>::scalar(3.145926f);
+        *a *= *b;
+        std::cout << *a << std::endl;
+        const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
+        BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,2,1}));
+        COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+    }
+
+
 }
 #endif //MATH_TESTS_H

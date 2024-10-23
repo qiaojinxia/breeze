@@ -4,6 +4,7 @@
 
 #ifndef MACRO_H
 #define MACRO_H
+#define INF std::numeric_limits<int>::infinity()
 
 using index_t = int64_t;
 #define DEFINE_BINARY_OP(OP_NAME, METHOD_NAME)                                  \

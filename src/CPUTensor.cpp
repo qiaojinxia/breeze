@@ -140,7 +140,7 @@ namespace Breeze {
     DEFINE_UNARY_OP(abs)
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims, const bool keep_dim) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims, const bool keep_dim) const{
         const index_t ndim = this->shape.ndim();
         // 处理标量sum
         if (ndim == 0) {
@@ -168,7 +168,7 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
-    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims, const bool keep_dim) {
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims, const bool keep_dim) const{
         const index_t ndim = this->shape.ndim();
         // 处理标量max
         if (ndim == 0) {
@@ -200,7 +200,7 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
-    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims, const bool keep_dim) {
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims, const bool keep_dim) const{
         const index_t ndim = this->shape.ndim();
         // 处理标量min
         if (ndim == 0) {
@@ -286,9 +286,39 @@ namespace Breeze {
         return CPUTensorOps<ScalarType>::getInstance().var(*this, dims, keep_dim, unbiased);
     }
 
+    template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::norm(std::vector<index_t> dims,  const int p, bool keep_dim) const {
+        const index_t ndim = this->shape.ndim();
+
+        BREEZE_ASSERT(ndim > 0, "Cannot perform norm on a scalar tensor as it contains only one element.");
+
+        // 验证 p 的值
+        BREEZE_ASSERT(p >= 0 || p == INF, "p-norm requires p >= 0, but got p = " + std::to_string(p));
+
+        // 如果维度为空，则返回整个张量的范数
+        if (dims.empty()) {
+            std::vector<index_t> all_dims = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().norm(*this, all_dims, keep_dim, p);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the norm operation.");
+
+        // 执行范数操作
+        return CPUTensorOps<ScalarType>::getInstance().norm(*this, dims, p, keep_dim);
+    }
 
     template<typename ScalarType>
-    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keep_dim) {
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims, const bool keep_dim) const{
         const index_t ndim = this->shape.ndim();
 
         if (ndim == 0) {
@@ -319,22 +349,22 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::sum(std::vector<index_t> dims) const{
         return sum(std::move(dims),false);
     }
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims) const{
         return max(std::move(dims),false);
     }
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::mean(std::vector<index_t> dims) const{
         return mean(std::move(dims),false);
     }
 
     template<typename ScalarType>
-    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims) {
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims) const{
         return min(std::move(dims),false);
     }
 
@@ -346,6 +376,23 @@ namespace Breeze {
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::var(std::vector<index_t> dims) {
         return var(std::move(dims), false, true);
+    }
+
+    template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::norm() const
+    {
+        return norm({}, false, 2);
+    }
+
+
+    template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::norm(const int p) const{
+        return norm({}, false, p);
+    }
+
+    template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::norm(std::vector<index_t> dims, const int p) const{
+        return norm(std::move(dims),  p, false);
     }
 
     DEFINE_BINARY_OP(pow, pow)

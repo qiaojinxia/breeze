@@ -91,7 +91,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::sum(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
+        const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
@@ -126,7 +126,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::max(
-      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
+      const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
@@ -162,7 +162,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::min(
-      Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
+      const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         const TensorIteratorConfig config = TensorIteratorConfig()
@@ -199,7 +199,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::mean(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
+        const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         // 计算总元素数
@@ -355,6 +355,77 @@ namespace Breeze {
             }
         );
 
+        return result;
+    }
+
+    template<typename ... ScalarTypes>
+    std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::norm(
+    const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const int p, const bool keep_dim) const {
+        using ResultT = ScalarT1;
+        auto result = std::make_shared<CPUTensor<ResultT>>();
+        // 配置迭代器
+        const TensorIteratorConfig config = TensorIteratorConfig()
+            .set_resize_outputs(true)
+            .set_is_reduction(true)
+            .set_reduce_dims(dims)
+            .set_keep_keep_dim(keep_dim);
+        // 创建迭代器
+        auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
+        // 特殊处理无穷范数
+        if (p == INF) {
+            // 使用迭代器计算无穷范数
+            iter.reduce_strided_for_each(
+                [](ResultT* out_ptr) {
+                    Vectorized<ResultT> value(std::numeric_limits<ResultT>::lowest());
+                    value.store(out_ptr);
+                },
+                // 找到每个元素的绝对值最大值
+                [](ResultT *out_ptr, ResultT a_value) {
+                    *out_ptr = std::max(*out_ptr, std::abs(a_value));
+                },
+                [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                    auto abs_max_vec = a_vec.abs();
+                    auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                    auto max_vec = Vectorized<ResultT>::max(out_vec, abs_max_vec);
+                    max_vec.store(out_ptr);
+                },
+                // 无需进一步处理，因为已经找到了最大值
+                [](const ResultT* data, const index_t size) {
+                    ResultT max_val = data[0];
+                    for (index_t i = 1; i < size; ++i) {
+                        max_val = std::max(max_val, data[i]);
+                    }
+                    return max_val;
+                }
+            );
+        } else {
+            // 使用迭代器计算范数
+            iter.reduce_strided_for_each(
+                [](ResultT* out_ptr) {
+                    Vectorized<ResultT> value(0);
+                    value.store(out_ptr);
+                },
+                // 累加每个元素的p次幂
+                [p](ResultT *out_ptr, ResultT a_value) {
+                    *out_ptr += std::pow(std::abs(a_value), p);
+                },
+                [p](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
+                    auto p_vec = Vectorized<ResultT>(static_cast<ResultT>(p));
+                    auto abs_pow_vec = a_vec.abs().pow(p_vec);
+                    auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
+                    auto sum_vec = out_vec + abs_pow_vec;
+                    sum_vec.store(out_ptr);
+                },
+                // 取p次幂的p次根得到范数
+                [p](const ResultT* data, const index_t size) {
+                    ResultT sum_pow = data[0];
+                    for (index_t i = 1; i < size; ++i) {
+                        sum_pow += data[i];
+                    }
+                    return std::pow(sum_pow, 1.0 / p);
+                }
+            );
+        }
         return result;
     }
 

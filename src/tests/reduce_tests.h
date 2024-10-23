@@ -260,6 +260,36 @@ static void test_Reduce() {
                 BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({3}));
                 COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-5);
             }
+            //测试 2 normal
+
+            {
+                const auto a =
+                            Tensor<float>::arange(210,290,1)
+                            ->view({4,4,5})->slice({"2:",":2","1:2"});
+                const std::vector<std::vector<float>> expected = {
+                    {369.380554},
+                    {376.446533},
+                };
+                auto b = a->norm({0},2);
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,1}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
+
+            //测试 无穷 normal
+
+            {
+                const auto a =
+                                   Tensor<float>::arange(210,290,1)
+                                   ->view({4,4,5})->slice({":2","1:","3:"});
+                const std::vector<std::vector<float>> expected = {
+                    {238., 239.},{243., 244.},{248., 249.},
+                };
+                auto b = a->norm({0},INF);
+                const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(b);
+                BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({3,2}));
+                COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);
+            }
 
 }
 #endif //REDUCE_TEST_H
