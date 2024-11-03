@@ -15,13 +15,13 @@ static void test_Performance() {
     // 测试 std
     {
 
-        const auto a = Tensor<float>::create_tensor({10000},1);
+        const auto a = Tensor<float>::create_tensor({1000000000},1);
         MEASURE_TIME({
             const auto b = a->std({0});
             // std::cout << "按列计算的标准差（应该为 0）:\n" << *b << std::endl;
         });
 
-        const arma::mat A = arma::ones<arma::mat>(10000);
+        const arma::mat A = arma::ones<arma::mat>(1000000000);
         MEASURE_TIME({
             // 按列计算标准差
             arma::vec std_dev_col = arma::stddev(A, 0, 0); // 计算每列的标准差

@@ -240,11 +240,6 @@ namespace Breeze {
         ResultT correction = unbiased ? total_elements - 1 : total_elements;
         correction = static_cast<ResultT>(1) / correction;
 
-        // 首先计算均值
-        std::shared_ptr<Tensor<ResultT>> mean_result = mean(a, cp_dims, true);
-        auto mean_tensor = dynamic_cast<Tensor<ScalarT2>*>(mean_result.get());
-        // 计算当前值减均值
-        subtract_inplace(a, *mean_tensor);
         // 配置迭代器
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)

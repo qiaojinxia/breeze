@@ -11,6 +11,7 @@
 #include "../common/Macro.h"
 #include "reduce_tests.h"
 #include "math_tests.h"
+#include "performance_test.h"
 using namespace Breeze;
 class TensorTest {
 public:
@@ -1554,9 +1555,10 @@ public:
     // }
     // 运行所有测试
     static void run_all_tests() {
+        test_Performance();
         // test_expand();
-        test_Math();
-        test_Reduce();
+        // test_Math();
+        // test_Reduce();
         // test_slice();
         // test_repeat();
         // test_stack();
