@@ -17,6 +17,14 @@ namespace Breeze {
     static constexpr index_t CACHE_LINE_SIZE = 64;  // Typical cache line size
     constexpr static index_t  TILE_SIZE = CACHE_LINE_SIZE * 64;
 
+    template<typename ResultT>
+    struct WelfordData {
+        ResultT mean;
+        ResultT m2;   // 二阶矩
+        size_t n;    // 计数
+        WelfordData(): mean(0), m2(0), n(0) {}
+    };
+
     // 辅助模板来获取类型包中的最后一个类型
     template<typename... ScalarTypes>
     struct last_type;
@@ -296,7 +304,8 @@ namespace Breeze {
             }
         }
 
-        template<typename ScalarReduceOp, typename ResultType, typename VectorReduceOp, size_t... Indices>
+        template<typename ScalarReduceOp, typename ResultType, typename AccumulatorType, typename VectorReduceOp, typename InitFunc,
+        index_t VectorSize, size_t... Indices>
         void reduce_non_contiguous(
             const char* base_ptr,
             const std::vector<index_t>& dimensions,
@@ -304,36 +313,51 @@ namespace Breeze {
             ScalarReduceOp scalar_reduce,
             VectorReduceOp vector_reduce,
             const index_t total_elements,
-            std::array<ResultType, SimdVectorSize>& accumulator,
+            std::array<AccumulatorType, VectorSize>& accumulator_storage,
             const index_t simd_remainder_start,
-            std::index_sequence<Indices...> ) {
-                std::vector<index_t> dimension_counters(dimensions.size());
-                std::array<const char*, SimdVectorSize> element_ptrs;
+            std::index_sequence<Indices...>) {
 
-                for (index_t batch_start = 0; batch_start <= total_elements - SimdVectorSize; batch_start += SimdVectorSize) {
-                    // Calculate pointers for SimdVectorSize elements at once
+            constexpr bool is_scalar_accumulator = std::is_same_v<AccumulatorType, ResultType>;
+
+            std::vector<index_t> dimension_counters(dimensions.size());
+            std::array<const char*, SimdVectorSize> element_ptrs;
+
+            if constexpr (is_scalar_accumulator) {
+                // 标量累加器的情况，使用 SIMD
+                for (index_t batch_start = 0; batch_start <= total_elements - SimdVectorSize;
+                     batch_start += SimdVectorSize) {
                     for (index_t i = 0; i < SimdVectorSize && (batch_start + i) < total_elements; ++i) {
                         Utils::index_to_counter(batch_start + i, dimension_counters, dimensions);
                         element_ptrs[i] = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
                     }
-                    // Load and reduce vector data
                     vector_reduce(
-                        reinterpret_cast<ResultType*>(&accumulator),
+                        reinterpret_cast<ResultType*>(&accumulator_storage),
                         Vectorized<ResultType>::loadu_unaligned(
                             reinterpret_cast<const ResultType*>(element_ptrs[Indices])...
                         )
                     );
                 }
 
-                // Handle remaining elements that don't fit in a full SIMD vector
                 for (index_t i = simd_remainder_start; i < total_elements; ++i) {
                     Utils::index_to_counter(i, dimension_counters, dimensions);
                     const char* scalar_ptr = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
                     scalar_reduce(
-                        reinterpret_cast<ResultType*>(&accumulator) + (i % SimdVectorSize),
+                        reinterpret_cast<ResultType*>(&accumulator_storage) + (i % SimdVectorSize),
                         *reinterpret_cast<const ResultType*>(scalar_ptr)
                     );
                 }
+            } else {
+                // 复杂累加器的情况，逐个处理
+                auto* accumulator = reinterpret_cast<AccumulatorType*>(accumulator_storage.data());
+                for (index_t i = 0; i < total_elements; ++i) {
+                    Utils::index_to_counter(i, dimension_counters, dimensions);
+                    const char* scalar_ptr = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
+                    scalar_reduce(
+                        accumulator,
+                        *reinterpret_cast<const ResultType*>(scalar_ptr)
+                    );
+                }
+            }
         }
 
         template<typename InitFunc, typename ScalarReduceOp, typename VectorReduceOp, typename FinalReduceOp>
@@ -358,16 +382,30 @@ namespace Breeze {
             const index_t simd_remainder_start = total_reduce_elements - total_reduce_elements % SimdVectorSize;
             const index_t final_reduce_count = std::min(total_reduce_elements, static_cast<index_t>(SimdVectorSize));
 
+            using AccumulatorType = std::invoke_result_t<InitFunc>;
+            // 判断累加器类型是否就是结果类型
+            constexpr bool is_scalar_accumulator = std::is_same_v<AccumulatorType, ResultScalarType>;
+            // 如果是相同类型，使用 SimdVectorSize；如果不同，使用 1
+            constexpr index_t VectorSize = is_scalar_accumulator ? SimdVectorSize : 1;
+
             #pragma omp parallel default(none) shared(total_reduce_elements, reduce_dimensions, \
                 outer_dimensions, outer_size, vector_reduce, scalar_reduce, \
                 final_reduce, init_value, operands_, is_reduce_dim_contiguous_, final_reduce_count, simd_remainder_start)
             {
                 alignas(64) std::array<char*, ScalarTypesSize> element_base_ptrs;
-                std::array<ResultScalarType, SimdVectorSize> accumulator = {};
+
+                alignas(alignof(AccumulatorType)) std::array<AccumulatorType, VectorSize> accumulator_storage = {};
                 std::vector<index_t> outer_counters(outer_dimensions.size());
 
                 auto process_tile = [&](const index_t tile_index) {
-                    init_value(reinterpret_cast<ResultScalarType*>(&accumulator));
+                    if constexpr (is_scalar_accumulator) {
+                        // 如果是标量，填充整个数组
+                        ResultScalarType init = init_value();
+                        std::fill_n(accumulator_storage.data(), VectorSize, init);
+                    } else {
+                        // 如果是复杂类型，使用 placement new
+                        new (accumulator_storage.data()) AccumulatorType(init_value());
+                    }
                     Utils::index_to_counter(tile_index, outer_counters, outer_dimensions);
                     for (size_t k = 0; k < operands_.size(); ++k) {
                         element_base_ptrs[k] = operands_[k].data + Utils::compute_offset(outer_counters, operands_[k].strides_bytes);
@@ -375,22 +413,30 @@ namespace Breeze {
 
                     if (is_reduce_dim_contiguous_) {
                         for (index_t j = 0; j <= total_reduce_elements - SimdVectorSize; j += SimdVectorSize) {
-                            vector_reduce(reinterpret_cast<ResultScalarType*>(&accumulator),
+                            vector_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage),
                                 Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
                         }
                         for (index_t j = simd_remainder_start; j < total_reduce_elements; ++j) {
                             const index_t vec_offset = j % SimdVectorSize;
-                            scalar_reduce(reinterpret_cast<ResultScalarType*>(&accumulator) + vec_offset,
+                            scalar_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage) + vec_offset,
                                 *(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
                         }
                     } else {
-                        reduce_non_contiguous(element_base_ptrs[0], reduce_dimensions,
-                            operands_[0].strides_bytes, scalar_reduce, vector_reduce,
-                            total_reduce_elements, accumulator,
-                            simd_remainder_start, std::make_index_sequence<SimdVectorSize>{});
+                       reduce_non_contiguous<decltype(scalar_reduce), ResultScalarType, AccumulatorType,
+                            decltype(vector_reduce), InitFunc, VectorSize>(
+                            element_base_ptrs[0],
+                            reduce_dimensions,
+                            operands_[0].strides_bytes,
+                            scalar_reduce,
+                            vector_reduce,
+                            total_reduce_elements,
+                            accumulator_storage,
+                            simd_remainder_start,
+                            std::make_index_sequence<SimdVectorSize>{}
+                        );
                     }
 
-                    ResultScalarType tile_result = final_reduce(accumulator.data(), final_reduce_count);
+                    ResultScalarType tile_result = final_reduce(accumulator_storage.data(), final_reduce_count);
                     *reinterpret_cast<ResultScalarType*>(element_base_ptrs[OptPutIndex]) = tile_result;
                 };
 

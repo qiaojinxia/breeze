@@ -101,10 +101,7 @@ namespace Breeze {
             .set_keep_keep_dim(keep_dim);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-                Vectorized<ResultT> value(0);
-                value.store(out_ptr);
-            },
+            []{return ResultT(0);},
             [](ResultT *out_ptr, ResultT a_value) {
                  *out_ptr += a_value;
             },
@@ -135,12 +132,8 @@ namespace Breeze {
             .set_is_reduction(true)
             .set_keep_keep_dim(keep_dim);
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
-        constexpr ResultT init_value = std::numeric_limits<ResultT>::min();
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-                Vectorized<ResultT> value(init_value);
-                value.store(out_ptr);
-            },
+            []{return ResultT(std::numeric_limits<ResultT>::min());},
             [](ResultT *out_ptr, ResultT a_value) {
                   *out_ptr = std::max(*out_ptr, a_value);
             },
@@ -170,14 +163,10 @@ namespace Breeze {
             .set_reduce_dims(dims)
             .set_is_reduction(true)
             .set_keep_keep_dim(keep_dim);
-        constexpr ResultT init_value = std::numeric_limits<ResultT>::max();
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         // 获取 ResultT 类型的最大可能值
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-               Vectorized<ResultT> value(init_value);
-               value.store(out_ptr);
-            },
+            []{return ResultT(std::numeric_limits<ResultT>::max());},
             [](ResultT *out_ptr, ResultT a_value) {
                   *out_ptr = std::min(*out_ptr, a_value);
             },
@@ -215,10 +204,7 @@ namespace Breeze {
 
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-                Vectorized<ResultT> value(0);
-                value.store(out_ptr);
-            },
+            []{return ResultT(0);},
             [](ResultT *out_ptr, ResultT a_value) {
                 *out_ptr += a_value;
             },
@@ -250,8 +236,9 @@ namespace Breeze {
             total_elements *= a.get_shape().dims()[dim];
         }
 
-        // 调整分母以计算无偏估计（N-1）或有偏估计（N）
-        index_t denominator = unbiased ? (total_elements - 1) : total_elements;
+        // 调整分母
+        ResultT correction = unbiased ? total_elements - 1 : total_elements;
+        correction = static_cast<ResultT>(1) / correction;
 
         // 首先计算均值
         std::shared_ptr<Tensor<ResultT>> mean_result = mean(a, cp_dims, true);
@@ -270,27 +257,30 @@ namespace Breeze {
 
         // 使用迭代器计算标准差
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-                Vectorized<ResultT> value(0);
-                value.store(out_ptr);
-            },
+            []{return WelfordData<ResultT>();},
             // 累加每个元素与均值的平方差
-            [](ResultT *out_ptr, ResultT a_value) {
-                *out_ptr += a_value * a_value;
+            [](WelfordData<ResultT>* out_ptr, ResultT a_value) {
+                ++out_ptr->n;
+                ResultT delta = a_value - out_ptr->mean;
+                out_ptr->mean += delta / out_ptr->n;
+                ResultT delta2 = a_value - out_ptr->mean;
+                out_ptr->m2 += delta * delta2;
             },
-            [](ResultT* out_ptr, const Vectorized<ResultT> a_vec) {
-                auto diff_sq_vec = a_vec * a_vec;
-                auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
-                auto sum_vec = out_vec + diff_sq_vec;
-                sum_vec.store(out_ptr);
+            [](WelfordData<ResultT>* out_ptr, const Vectorized<ResultT> a_vec) {
+                auto a_vec_ptr = reinterpret_cast<const ResultT*>(&a_vec);
+                // 逐个元素更新
+                for (int i = 0; i < Vectorized<ResultT>::size(); i++) {
+                    ++out_ptr->n;
+                    ResultT delta = a_vec_ptr[i] - out_ptr->mean;
+                    out_ptr->mean += delta / out_ptr->n;
+                    ResultT delta2 = a_vec_ptr[i] - out_ptr->mean;
+                    out_ptr->m2 += delta * delta2;
+                }
             },
             // 计算方差，然后取平方根得到标准差
-            [denominator](const ResultT* data, const index_t size) {
-                ResultT sum_sq_diff = data[0];
-                for (index_t i = 1; i < size; ++i) {
-                    sum_sq_diff += data[i];
-                }
-                ResultT variance = sum_sq_diff / static_cast<ResultT>(denominator);
+            [correction](const WelfordData<ResultT>* data_ptr, const index_t size) {
+                (void)size;
+                ResultT variance = data_ptr->m2 * correction;
                 return std::sqrt(variance);
             }
         );
@@ -331,10 +321,7 @@ namespace Breeze {
 
         // 使用迭代器计算方差
         iter.reduce_strided_for_each(
-            [](ResultT* out_ptr) {
-                Vectorized<ResultT> value(0);
-                value.store(out_ptr);
-            },
+            []{return ResultT(0);},
             // 累加每个元素与均值的平方差
             [](ResultT *out_ptr, ResultT input_value) {
                 *out_ptr += input_value * input_value;
@@ -375,10 +362,7 @@ namespace Breeze {
         if (p == INF) {
             // 使用迭代器计算无穷范数
             iter.reduce_strided_for_each(
-                [](ResultT* out_ptr) {
-                    Vectorized<ResultT> value(std::numeric_limits<ResultT>::lowest());
-                    value.store(out_ptr);
-                },
+                []{return ResultT(std::numeric_limits<ResultT>::lowest());},
                 // 找到每个元素的绝对值最大值
                 [](ResultT *out_ptr, ResultT a_value) {
                     *out_ptr = std::max(*out_ptr, std::abs(a_value));
@@ -401,10 +385,7 @@ namespace Breeze {
         } else {
             // 使用迭代器计算范数
             iter.reduce_strided_for_each(
-                [](ResultT* out_ptr) {
-                    Vectorized<ResultT> value(0);
-                    value.store(out_ptr);
-                },
+                []{return ResultT(0);},
                 // 累加每个元素的p次幂
                 [p](ResultT *out_ptr, ResultT a_value) {
                     *out_ptr += std::pow(std::abs(a_value), p);
