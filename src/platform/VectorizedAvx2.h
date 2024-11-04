@@ -19,9 +19,20 @@ namespace Breeze {
         explicit Vectorized(const float v) : values(_mm256_set1_ps(v)) {}
         explicit Vectorized(const __m256 v) : values(v) {}
 
+        // 水平求和
+        [[nodiscard]] float horizontal_sum() const {
+            const __m128 low = _mm256_castps256_ps128(values);
+            const auto high = _mm256_extractf128_ps(values, 1);
+            __m128 sum = _mm_add_ps(low, high);
+            sum = _mm_add_ps(sum, _mm_movehl_ps(sum, sum));
+            sum = _mm_add_ss(sum, _mm_shuffle_ps(sum, sum, 1));
+            return _mm_cvtss_f32(sum);
+        }
+
         Vectorized operator+(const Vectorized& other) const {
             return Vectorized(_mm256_add_ps(values, other.values));
         }
+
 
         Vectorized operator-(const Vectorized& other) const {
             return Vectorized(_mm256_sub_ps(values, other.values));
@@ -153,6 +164,21 @@ namespace Breeze {
         Vectorized() : values(_mm256_setzero_pd()) {}
         explicit Vectorized(const double v) : values(_mm256_set1_pd(v)) {}
         explicit Vectorized(const __m256d v) : values(v) {}
+
+        [[nodiscard]] double horizontal_sum() const {
+            // 1. 分离高低 128 位
+            const __m128d low = _mm256_castpd256_pd128(values);
+            const __m128d high = _mm256_extractf128_pd(values, 1);
+
+            // 2. 将高低位相加
+            __m128d sum = _mm_add_pd(low, high);
+
+            // 3. 将结果的两个双精度数相加
+            sum = _mm_add_sd(sum, _mm_unpackhi_pd(sum, sum));
+
+            // 4. 提取结果
+            return _mm_cvtsd_f64(sum);
+        }
 
         Vectorized operator+(const Vectorized& other) const {
             return Vectorized(_mm256_add_pd(values, other.values));

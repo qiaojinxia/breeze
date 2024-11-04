@@ -229,7 +229,8 @@ namespace Breeze {
         Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
-        auto cp_dims = std::vector<index_t>(dims.begin(), dims.end());;
+        auto cp_dims = std::vector<index_t>(dims.begin(), dims.end());
+
         // 计算总元素数
         index_t total_elements = 1;
         for (const auto dim : dims) {
@@ -249,40 +250,37 @@ namespace Breeze {
 
         // 创建迭代器
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
-
-        // 使用迭代器计算标准差
+        // 小数据量使用优化后的两遍算法
+        struct TwoPassData {
+            ResultT mean = 0;
+            ResultT sum_sq = 0;
+            index_t count = 0;
+        };
+        // 一次遍历计算均值和平方和
         iter.reduce_strided_for_each(
-            []{return WelfordData<ResultT>();},
-            // 累加每个元素与均值的平方差
-            [](WelfordData<ResultT>* out_ptr, ResultT a_value) {
-                ++out_ptr->n;
-                ResultT delta = a_value - out_ptr->mean;
-                out_ptr->mean += delta / out_ptr->n;
-                ResultT delta2 = a_value - out_ptr->mean;
-                out_ptr->m2 += delta * delta2;
+            []{return TwoPassData();},
+            [](TwoPassData* data, ResultT val) {
+                data->mean += val;
+                data->sum_sq += val * val;
+                ++data->count;
             },
-            [](WelfordData<ResultT>* out_ptr, const Vectorized<ResultT> a_vec) {
-                auto a_vec_ptr = reinterpret_cast<const ResultT*>(&a_vec);
-                // 逐个元素更新
-                for (int i = 0; i < Vectorized<ResultT>::size(); i++) {
-                    ++out_ptr->n;
-                    ResultT delta = a_vec_ptr[i] - out_ptr->mean;
-                    out_ptr->mean += delta / out_ptr->n;
-                    ResultT delta2 = a_vec_ptr[i] - out_ptr->mean;
-                    out_ptr->m2 += delta * delta2;
-                }
+            [](TwoPassData* data, const Vectorized<ResultT> vec) {
+                auto pow_vec = vec * vec;
+                data->mean += vec.horizontal_sum();
+                data->sum_sq += pow_vec.horizontal_sum();
+                data->count+=Vectorized<ResultT>::size();
             },
-            // 计算方差，然后取平方根得到标准差
-            [correction](const WelfordData<ResultT>* data_ptr, const index_t size) {
+            [correction](const TwoPassData* data, const index_t size) {
                 (void)size;
-                ResultT variance = data_ptr->m2 * correction;
+                ResultT mean = data->mean / data->count;
+                // 使用公式: Var(X) = E(X^2) - E(X)^2
+                ResultT variance = (data->sum_sq / data->count) - (mean * mean);
+                variance *= correction * data->count;  // 应用修正因子
                 return std::sqrt(variance);
             }
         );
-
         return result;
     }
-
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::var(
         Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
@@ -296,14 +294,10 @@ namespace Breeze {
             total_elements *= a.get_shape().dims()[dim];
         }
 
-        // 调整分母以计算无偏估计（N-1）或有偏估计（N）
-        index_t denominator = unbiased ? (total_elements - 1) : total_elements;
+        // 调整分母（无偏估计时使用 n-1）
+        ResultT correction = unbiased ? total_elements - 1 : total_elements;
+        correction = static_cast<ResultT>(1) / correction;
 
-        // 首先计算均值
-        std::shared_ptr<Tensor<ResultT>> mean_result = mean(a, cp_dims, true);
-        auto mean_tensor = dynamic_cast<Tensor<ScalarT2>*>(mean_result.get());
-        // 计算当前值减均值
-        subtract_inplace(a, *mean_tensor);
         // 配置迭代器
         const TensorIteratorConfig config = TensorIteratorConfig()
             .set_resize_outputs(true)
@@ -314,29 +308,41 @@ namespace Breeze {
         // 创建迭代器
         auto iter = TensorIterator<ResultT, ResultT>::reduce_op(*result, a, config);
 
-        // 使用迭代器计算方差
+        // 定义两遍算法的数据结构
+        struct TwoPassData {
+            ResultT mean = 0;
+            ResultT sum_sq = 0;
+            index_t count = 0;
+        };
+
+        // 一次遍历计算均值和平方和
         iter.reduce_strided_for_each(
-            []{return ResultT(0);},
-            // 累加每个元素与均值的平方差
-            [](ResultT *out_ptr, ResultT input_value) {
-                *out_ptr += input_value * input_value;
+            // 初始化函数
+            []{return TwoPassData();},
+            // 标量处理函数
+            [](TwoPassData* data, ResultT val) {
+                data->mean += val;
+                data->sum_sq += val * val;
+                ++data->count;
             },
-            [](ResultT* out_ptr, const Vectorized<ResultT> input_vec) {
-                auto diff_sq_vec = input_vec * input_vec;
-                auto out_vec = Vectorized<ResultT>::loadu(out_ptr);
-                auto sum_vec = out_vec + diff_sq_vec;
-                sum_vec.store(out_ptr);
+
+            // 向量化处理函数
+            [](TwoPassData* data, const Vectorized<ResultT> vec) {
+                auto pow_vec = vec * vec;
+                data->mean += vec.horizontal_sum();
+                data->sum_sq += pow_vec.horizontal_sum();
+                data->count += Vectorized<ResultT>::size();
             },
-            // 计算方差
-            [denominator](const ResultT* data, const index_t size) {
-                ResultT sum_sq_diff = data[0];
-                for (index_t i = 1; i < size; ++i) {
-                    sum_sq_diff += data[i];
-                }
-                return sum_sq_diff / static_cast<ResultT>(denominator);
+
+            // 最终计算函数
+            [correction](const TwoPassData* data, const index_t size) {
+                (void)size;
+                ResultT mean = data->mean / data->count;
+                // 使用公式: Var(X) = E(X^2) - E(X)^2
+                ResultT variance = (data->sum_sq / data->count) - (mean * mean);
+                return variance * correction * data->count;
             }
         );
-
         return result;
     }
 

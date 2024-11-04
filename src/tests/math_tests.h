@@ -245,7 +245,6 @@ static void test_Math()
         };
         const auto b = Tensor<float>::scalar(3.145926f);
         *a *= *b;
-        std::cout << *a << std::endl;
         const auto tensor = std::dynamic_pointer_cast<Tensor<float>>(a->contiguous());
         BREEZE_ASSERT(tensor->get_shape().dims() == std::vector<index_t>({2,2,1}));
         COMPARE_TENSOR_DATA(tensor->mutable_data(), expected, 1e-6);

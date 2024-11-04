@@ -17,14 +17,6 @@ namespace Breeze {
     static constexpr index_t CACHE_LINE_SIZE = 64;  // Typical cache line size
     constexpr static index_t  TILE_SIZE = CACHE_LINE_SIZE * 64;
 
-    template<typename ResultT>
-    struct WelfordData {
-        ResultT mean;
-        ResultT m2;   // 二阶矩
-        size_t n;    // 计数
-        WelfordData(): mean(0), m2(0), n(0) {}
-    };
-
     // 辅助模板来获取类型包中的最后一个类型
     template<typename... ScalarTypes>
     struct last_type;

@@ -1555,6 +1555,7 @@ public:
     // }
     // 运行所有测试
     static void run_all_tests() {
+        test_Math();
         test_Performance();
         // test_expand();
         // test_Math();

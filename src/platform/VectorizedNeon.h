@@ -99,6 +99,7 @@ namespace Breeze {
             return Vectorized(vec_result);
         }
 
+
         static Vectorized loadu(const char* ptr) {
             return Vectorized(vld1q_f32(reinterpret_cast<const float*>(ptr)));
         }
