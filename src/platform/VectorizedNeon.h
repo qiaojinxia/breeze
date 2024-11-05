@@ -29,6 +29,16 @@ namespace Breeze {
             asm volatile("prfm pldl1keep, [%0]" : : "r" (ptr));
         }
 
+        [[nodiscard]] float horizontal_sum() const {
+
+            // 先将四个float两两相加，得到两个float
+            const float32x2_t sum64 = vadd_f32(vget_low_f32(values), vget_high_f32(values));
+
+            // 再将两个float相加，得到最终结果
+            // vpaddq_f32将相邻的两个float相加
+            return vget_lane_f32(vpadd_f32(sum64, sum64), 0);
+        }
+
         Vectorized operator+(const Vectorized& other) const {
             return Vectorized(vaddq_f32(values, other.values));
         }
@@ -152,6 +162,11 @@ namespace Breeze {
         Vectorized() : values(vdupq_n_f64(0.0)) {}
         explicit Vectorized(const double v) : values(vdupq_n_f64(v)) {}
         explicit Vectorized(const float64x2_t v) : values(v) {}
+
+        // 水平求和
+        [[nodiscard]] double horizontal_sum() const {
+            return vaddvq_f64(values);
+        }
 
         Vectorized operator+(const Vectorized& other) const {
             return Vectorized(vaddq_f64(values, other.values));

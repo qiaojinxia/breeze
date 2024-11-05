@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <numeric>
 #include "common/Utils.h"
-#include "platform/SIMDFactory.h"
+#include "platform/SIMD.h"
 #include "./common/Macro.h"
 
 namespace Breeze {

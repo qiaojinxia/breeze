@@ -109,7 +109,7 @@ set(HEADERS
         src/common/Utils.h
         src/tests/test_cases.h
         src/TensorIterator.h
-        src/platform/SIMDFactory.h
+        src/platform/SIMD.h
         ${SIMD_HEADERS}
         src/ScalarType.h
         src/TensorIteratorConfig.cpp

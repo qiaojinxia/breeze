@@ -1,7 +1,7 @@
 #include "CPUTensorOps.h"
 #include <cblas.h>
 #include "TensorIterator.h"
-#include "platform/SIMDFactory.h"
+#include "platform/SIMD.h"
 #include "CPUTensor.h"
 #include "./lib/pcg/pcg_random.hpp"
 
@@ -226,7 +226,7 @@ namespace Breeze {
 
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::std(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
+        const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto cp_dims = std::vector<index_t>(dims.begin(), dims.end());
@@ -268,7 +268,7 @@ namespace Breeze {
                 auto pow_vec = vec * vec;
                 data->mean += vec.horizontal_sum();
                 data->sum_sq += pow_vec.horizontal_sum();
-                data->count+=Vectorized<ResultT>::size();
+                data->count += Vectorized<ResultT>::size();
             },
             [correction](const TwoPassData* data, const index_t size) {
                 (void)size;
@@ -281,9 +281,10 @@ namespace Breeze {
         );
         return result;
     }
+
     template<typename ... ScalarTypes>
     std::shared_ptr<Tensor<typename CPUTensorOps<ScalarTypes...>::ScalarT1>> CPUTensorOps<ScalarTypes...>::var(
-        Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
+        const Tensor<ScalarT1> &a, std::vector<index_t> &dims, const bool keep_dim, const bool unbiased) const {
         using ResultT = ScalarT1;
         auto result = std::make_shared<CPUTensor<ResultT>>();
         auto cp_dims = std::vector<index_t>(dims.begin(), dims.end());
