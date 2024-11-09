@@ -168,6 +168,39 @@ namespace Breeze {
     }
 
     template<typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::prod(std::vector<index_t> dims, const bool keep_dim) const {
+        const index_t ndim = this->shape.ndim();
+
+        // 处理标量prod
+        if (ndim == 0) {
+            auto result = std::make_shared<CPUTensor>(Shape{});
+            result->mutable_data()[0] = this->data()[0];
+            return result;
+        }
+
+        // 如果维度为空，则返回整个张量的积
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().prod(*this, all_dim, keep_dim);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the prod operation.");
+
+        // 执行求积操作
+        return CPUTensorOps<ScalarType>::getInstance().prod(*this, dims, keep_dim);
+    }
+
+    template<typename ScalarType>
     [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims, const bool keep_dim) const{
         const index_t ndim = this->shape.ndim();
         // 处理标量max
@@ -197,6 +230,40 @@ namespace Breeze {
 
         // 执行最大值操作
         return CPUTensorOps<ScalarType>::getInstance().max(*this, dims, keep_dim);
+    }
+
+
+    template<typename ScalarType>
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::arg_max(std::vector<index_t> dims, const bool keep_dim) const {
+        const index_t ndim = this->shape.ndim();
+
+        // 处理标量arg_max
+        if (ndim == 0) {
+            auto result = std::make_shared<CPUTensor<index_t>>(Shape{});
+            result->mutable_data()[0] = 0;
+            return result;
+        }
+
+        // 如果维度为空，则返回整个张量的arg_max
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().arg_max(*this, all_dim, keep_dim);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the arg_max operation.");
+
+        // 执行arg_max操作
+        return CPUTensorOps<ScalarType>::getInstance().arg_max(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
@@ -229,6 +296,39 @@ namespace Breeze {
 
         // 执行最小值操作
         return CPUTensorOps<ScalarType>::getInstance().min(*this, dims, keep_dim);
+    }
+
+    template<typename ScalarType>
+    [[nodiscard]] std::shared_ptr<TensorBase> CPUTensor<ScalarType>::arg_min(std::vector<index_t> dims, const bool keep_dim) const {
+        const index_t ndim = this->shape.ndim();
+
+        // 处理标量arg_min
+        if (ndim == 0) {
+            auto result = std::make_shared<CPUTensor<index_t>>(Shape{});
+            result->mutable_data()[0] = 0;
+            return result;
+        }
+
+        // 如果维度为空，则返回整个张量的arg_min
+        if (dims.empty()) {
+            std::vector<index_t> all_dim = Utils::create_index_sequence(ndim);
+            return CPUTensorOps<ScalarType>::getInstance().arg_min(*this, all_dim, keep_dim);
+        }
+
+        // 检查维度的有效性
+        for (const auto& dim : dims) {
+            BREEZE_ASSERT(dim >= 0 && dim < ndim,
+                "Dimension index " + std::to_string(dim) + " is out of bounds for tensor with " + std::to_string(ndim) + " dimensions.");
+        }
+
+        // 检查维度是否重复
+        std::vector<index_t> sorted_dims = dims;
+        std::sort(sorted_dims.begin(), sorted_dims.end());
+        BREEZE_ASSERT(std::unique(sorted_dims.begin(), sorted_dims.end()) == sorted_dims.end(),
+            "Duplicate dimensions are not allowed in the arg_min operation.");
+
+        // 执行arg_min操作
+        return CPUTensorOps<ScalarType>::getInstance().arg_min(*this, dims, keep_dim);
     }
 
     template<typename ScalarType>
@@ -353,9 +453,20 @@ namespace Breeze {
         return sum(std::move(dims),false);
     }
 
+    template <typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::prod(std::vector<index_t> dims) const{
+        return prod(std::move(dims),false);
+    }
+
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::max(std::vector<index_t> dims) const{
         return max(std::move(dims),false);
+    }
+
+    template <typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::arg_max(std::vector<index_t> dims) const
+    {
+        return arg_max(std::move(dims),false);
     }
 
     template<typename ScalarType>
@@ -367,6 +478,13 @@ namespace Breeze {
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::min(std::vector<index_t> dims) const{
         return min(std::move(dims),false);
     }
+
+    template <typename ScalarType>
+    std::shared_ptr<TensorBase> CPUTensor<ScalarType>::arg_min(std::vector<index_t> dims) const
+    {
+        return arg_max(std::move(dims),false);
+    }
+
 
     template<typename ScalarType>
     std::shared_ptr<TensorBase> CPUTensor<ScalarType>::std(std::vector<index_t> dims) {
@@ -1368,6 +1486,7 @@ namespace Breeze {
         }
     }
     // Explicit instantiation for common types
+    template class CPUTensor<i64>;
     template class CPUTensor<float>;
     template class CPUTensor<double>;
 

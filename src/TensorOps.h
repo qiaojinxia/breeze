@@ -17,7 +17,7 @@ namespace Breeze {
         using ScalarT2 = std::tuple_element_t<1, std::tuple<ScalarTypes..., void, void>>;
 
         using EffectiveScalarT2 = std::conditional_t<std::is_same_v<ScalarT2, void>, ScalarT1, ScalarT2>;
-        using ScalarResultType = typename BinaryOpResultType<ScalarT1, EffectiveScalarT2>::type;
+        using ScalarResultType = binary_op_result_t<ScalarT1, EffectiveScalarT2>;
 
         virtual void fill(Tensor<ScalarT1>& a, ScalarT1 value) const = 0;
         virtual void arange(Tensor<ScalarT1>& a, ScalarT1 start, ScalarT1 step) const = 0;
@@ -46,8 +46,11 @@ namespace Breeze {
 
         //reduce操作
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> sum(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> prod(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<index_t>> arg_max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<index_t>> arg_min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> mean(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> std(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> var(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const = 0;

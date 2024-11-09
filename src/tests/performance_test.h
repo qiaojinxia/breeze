@@ -15,7 +15,7 @@ static void test_Performance() {
     // 测试 std
     {
 
-        const auto a = Tensor<float>::randn({100000});
+        const auto a = Tensor<float>::randn({1000000});
         MEASURE_TIME({
             const auto b = a->std({0});
             std::cout << "按列计算的标准差（应该为 0）:\n" << *b << std::endl;
@@ -24,7 +24,7 @@ static void test_Performance() {
         const arma::mat A = arma::ones<arma::mat>(100000);
         MEASURE_TIME({
             // 按列计算标准差
-            arma::vec std_dev_col = arma::stddev(A, 0, 0); // 计算每列的标准差
+            const arma::vec std_dev_col = arma::stddev(A, 0, 0); // 计算每列的标准差
             std::cout << "按列计算的标准差（应该为 0）:\n" << std_dev_col << std::endl;
       });
     }

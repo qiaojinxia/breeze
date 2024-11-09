@@ -4,9 +4,7 @@
 
 #ifndef scalar_t_H
 #define scalar_t_H
-#include <cstdint>
 #include <stdexcept>
-#include <type_traits>
 #include "./common/Macro.h"
 
 namespace Breeze {
@@ -15,6 +13,8 @@ namespace Breeze {
         Float,
         Double,
         Bool,
+        Int64,
+        Int32,
     };
 
     template <typename ScalarType>
@@ -23,6 +23,8 @@ namespace Breeze {
     template <> struct TypeToScalarType<float> { static constexpr auto value = ScalarType::Float; };
     template <> struct TypeToScalarType<double> { static constexpr auto value = ScalarType::Double; };
     template <> struct TypeToScalarType<bool> { static constexpr auto value = ScalarType::Bool; };
+    template <> struct TypeToScalarType<i64> { static constexpr auto value = ScalarType::Int64; };
+    template <> struct TypeToScalarType<i32> { static constexpr auto value = ScalarType::Int32; };
 
     inline std::string scalar_type_to_string(const ScalarType type) {
         switch (type) {
@@ -32,6 +34,10 @@ namespace Breeze {
                 return "Double";
             case ScalarType::Bool:
                 return "Bool";
+            case ScalarType::Int64:
+                return "int64";
+            case ScalarType::Int32:
+                return "int32";
             default:
                 return "Unknown";
         }
@@ -47,7 +53,13 @@ namespace Breeze {
                 byte_size = sizeof(double);  // 注意：这里应该是 double，而不是 float
             break;
             case ScalarType::Bool:
-                byte_size = sizeof(bool);    // 使用 bool 而不是 float
+                byte_size = sizeof(bool);
+            break;
+            case ScalarType::Int64:
+                byte_size = sizeof(i64);
+            break;
+            case ScalarType::Int32:
+                byte_size = sizeof(i32);
             break;
             // 可以根据需要添加更多的标量类型
             default:
@@ -64,31 +76,68 @@ namespace Breeze {
         return byte_strides;
     }
 
+    // Type mapping entry
+    template<typename T1, typename T2, typename Result>
+    struct TypeMapping {
+        using first_type = T1;
+        using second_type = T2;
+        using result_type = Result;
+    };
+
+    // Static type dictionary
+    template<typename... Mappings>
+    struct TypeDictionary {
+        template<typename T1, typename T2>
+        struct Lookup {
+            using type = std::common_type_t<T1, T2>;  // default fallback
+        };
+    };
+
+    // Specialization for non-empty dictionary
+    template<typename Mapping, typename... Rest>
+    struct TypeDictionary<Mapping, Rest...> {
+        template<typename T1, typename T2>
+        struct Lookup {
+        private:
+            using CurrentMatch = std::conjunction<
+                std::is_same<T1, typename Mapping::first_type>,
+                std::is_same<T2, typename Mapping::second_type>
+            >;
+
+            using NextLookup = typename TypeDictionary<Rest...>::template Lookup<T1, T2>;
+
+        public:
+            using type = std::conditional_t<
+                CurrentMatch::value,
+                typename Mapping::result_type,
+                typename NextLookup::type
+            >;
+        };
+    };
+
+    // Define the type dictionary
+    using BinaryOpTypeDict = TypeDictionary<
+        TypeMapping<float, double, double>,
+        TypeMapping<float, float, float>,
+        TypeMapping<double, double, double>,
+        TypeMapping<double, float, double>,
+        TypeMapping<i64, i64, i64>,
+        TypeMapping<i64, float, float>,
+        TypeMapping<float, i64, float>,
+        TypeMapping<i64, double, double>,
+        TypeMapping<double, i64, double>
+    >;
+
+    // New simplified BinaryOpResultType
     template<typename ScalarT1, typename ScalarT2>
     struct BinaryOpResultType {
-        using type = std::common_type_t<ScalarT1, ScalarT2>;
+        using type = typename BinaryOpTypeDict::Lookup<ScalarT1, ScalarT2>::type;
     };
 
-    // Specializations for specific type combinations
-    template<>
-    struct BinaryOpResultType<float, double> {
-        using type = double;
-    };
+    // Helper alias template for easier usage
+    template<typename T1, typename T2>
+        using binary_op_result_t = typename BinaryOpResultType<T1, T2>::type;
+    }
 
-    template<>
-  struct BinaryOpResultType<float, float> {
-        using type = float;
-    };
-
-    template<>
-  struct BinaryOpResultType<double, double> {
-        using type = double;
-    };
-
-    template<>
-    struct BinaryOpResultType<double, float> {
-        using type = double;
-    };
-
-}
 #endif //scalar_t_H
+

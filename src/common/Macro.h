@@ -7,6 +7,9 @@
 #define INF std::numeric_limits<int>::infinity()
 
 using index_t = int64_t;
+using i64 = int64_t;
+using i32 = int32_t;
+
 #define DEFINE_BINARY_OP(OP_NAME, METHOD_NAME)                                  \
 template<typename ScalarType>                                                  \
 std::shared_ptr<TensorBase> CPUTensor<ScalarType>::OP_NAME(const TensorBase& rhs) const { \

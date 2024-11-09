@@ -41,17 +41,23 @@ namespace Breeze {
 
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims, bool keep_dim) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> prod(std::vector<index_t> dims, bool keep_dim) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims, bool keep_dim) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> arg_max(std::vector<index_t> dims, bool keep_dim) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims, bool keep_dim) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims, bool keep_dim) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> arg_min(std::vector<index_t> dims, bool keep_dim) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims, bool keep_dim, bool unbiased) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> var(std::vector<index_t> dims, bool keep_dim, bool unbiased) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> norm(std::vector<index_t> dims, int p, bool keep_dim) const override;
 
         [[nodiscard]] std::shared_ptr<TensorBase> sum(std::vector<index_t> dims) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> prod(std::vector<index_t> dims) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> max(std::vector<index_t> dims) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> arg_max(std::vector<index_t> dims) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> mean(std::vector<index_t> dims) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> min(std::vector<index_t> dims) const override;
+        [[nodiscard]] std::shared_ptr<TensorBase> arg_min(std::vector<index_t> dims) const override;
         [[nodiscard]] std::shared_ptr<TensorBase> std(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> var(std::vector<index_t> dims) override;
         [[nodiscard]] std::shared_ptr<TensorBase> norm() const override;

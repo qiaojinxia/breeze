@@ -32,6 +32,12 @@ namespace Breeze {
     template<typename... ScalarTypes>
     using LastScalarType = typename last_type<ScalarTypes...>::type;
 
+    template<typename First, typename... Rest>
+    struct GetFirst {
+        using type = First;
+    };
+
+
     template<typename ScalarType>
     class Tensor;
 
@@ -39,7 +45,8 @@ namespace Breeze {
     class TensorIterator {
     public:
         using ResultScalarType = LastScalarType<ScalarTypes...>;
-        static constexpr index_t SimdVectorSize = Vectorized<ResultScalarType>::size();
+        using FirstInputType = typename GetFirst<ScalarTypes...>::type;
+        static constexpr index_t SimdVectorSize = Vectorized<FirstInputType>::size();
         //输出类型 的大小
         static constexpr size_t ResultTypeSize = sizeof(ResultScalarType);
         static constexpr size_t ScalarTypesSize = sizeof ...(ScalarTypes);
@@ -324,8 +331,8 @@ namespace Breeze {
                     }
                     vector_reduce(
                         reinterpret_cast<ResultType*>(&accumulator_storage),
-                        Vectorized<ResultType>::loadu_unaligned(
-                            reinterpret_cast<const ResultType*>(element_ptrs[Indices])...
+                        Vectorized<FirstInputType>::loadu_unaligned(
+                            reinterpret_cast<const FirstInputType*>(element_ptrs[Indices])...
                         )
                     );
                 }
@@ -335,7 +342,7 @@ namespace Breeze {
                     const char* scalar_ptr = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
                     scalar_reduce(
                         reinterpret_cast<ResultType*>(&accumulator_storage) + (i % SimdVectorSize),
-                        *reinterpret_cast<const ResultType*>(scalar_ptr)
+                        *reinterpret_cast<const FirstInputType*>(scalar_ptr)
                     );
                 }
             } else {
@@ -346,7 +353,7 @@ namespace Breeze {
                     const char* scalar_ptr = base_ptr + Utils::compute_offset(dimension_counters, strides_bytes, 0);
                     scalar_reduce(
                         accumulator,
-                        *reinterpret_cast<const ResultType*>(scalar_ptr)
+                        *reinterpret_cast<const FirstInputType*>(scalar_ptr)
                     );
                 }
             }
@@ -406,12 +413,19 @@ namespace Breeze {
                     if (is_reduce_dim_contiguous_) {
                         for (index_t j = 0; j <= total_reduce_elements - SimdVectorSize; j += SimdVectorSize) {
                             vector_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage),
-                                Vectorized<ResultScalarType>::loadu(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
+                                Vectorized<FirstInputType>::loadu(
+                                    reinterpret_cast<FirstInputType*>(element_base_ptrs[0]) + j));
                         }
                         for (index_t j = simd_remainder_start; j < total_reduce_elements; ++j) {
-                            const index_t vec_offset = j % SimdVectorSize;
-                            scalar_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage) + vec_offset,
-                                *(reinterpret_cast<ResultScalarType*>(element_base_ptrs[0]) + j));
+                            if constexpr (is_scalar_accumulator)
+                            {
+                                const index_t vec_offset = j % SimdVectorSize;
+                                scalar_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage) + vec_offset,
+                                    *(reinterpret_cast<FirstInputType*>(element_base_ptrs[0]) + j));
+                            }else{
+                                scalar_reduce(reinterpret_cast<AccumulatorType*>(&accumulator_storage),
+                                   *(reinterpret_cast<FirstInputType*>(element_base_ptrs[0]) + j));
+                            }
                         }
                     } else {
                        reduce_non_contiguous<decltype(scalar_reduce), ResultScalarType, AccumulatorType,
