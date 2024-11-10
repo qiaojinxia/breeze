@@ -59,11 +59,7 @@ namespace Breeze {
     template<typename ... ScalarTypes>
     void CPUTensorOps<ScalarTypes...>::randn(Tensor<ScalarT1> &a) const {
         using ScalarT1 = typename BaseOps::ScalarT1;
-        using RealType = std::conditional_t<
-            std::is_same_v<ScalarT1, float> || std::is_same_v<ScalarT1, double>,
-            ScalarT1,
-            float
-        >;
+        using RealType = std::conditional_t<std::is_same_v<ScalarT1, float> || std::is_same_v<ScalarT1, double>, ScalarT1, float>;
 
         auto iter = TensorIterator<ScalarT1>::nullary_op(a);
         alignas(64) pcg_extras::seed_seq_from<std::random_device> seed_source;
@@ -213,7 +209,7 @@ namespace Breeze {
     };
 
     template <typename ... ScalarTypes>
-    std::shared_ptr<Tensor<index_t>> CPUTensorOps<ScalarTypes...>::arg_max(const Tensor<ScalarT1>& a,
+    std::shared_ptr<Tensor<i64>> CPUTensorOps<ScalarTypes...>::arg_max(const Tensor<ScalarT1>& a,
         std::vector<index_t>& dims, const bool keep_dim) const
     {
         auto result = std::make_shared<CPUTensor<index_t>>();
@@ -223,13 +219,13 @@ namespace Breeze {
         .set_is_reduction(true)
         .set_keep_keep_dim(keep_dim);
 
-        using IndexType = std::conditional_t<std::is_same_v<ScalarT1, float>, int32_t, index_t>;
-        auto iter = TensorIterator<ScalarT1, index_t>::reduce_op(*result, a, config);
+        using IndexType = std::conditional_t<std::is_same_v<ScalarT1, float>, i32, i64>;
+        auto iter = TensorIterator<ScalarT1, i64>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
            []{
-               return MaxArgData<ScalarT1,IndexType>();
+               return MaxArgData<ScalarT1, IndexType>();
            },
-           [](MaxArgData<ScalarT1,IndexType> *data, const ScalarT1 a_value) {
+           [](MaxArgData<ScalarT1, IndexType> *data, const ScalarT1 a_value) {
                if (a_value > data->max_vec[0])
                {
                    data->max_vec[0] = a_value;
@@ -277,7 +273,7 @@ namespace Breeze {
     };
 
     template <typename ... ScalarTypes>
-    std::shared_ptr<Tensor<index_t>> CPUTensorOps<ScalarTypes...>::arg_min(const Tensor<ScalarT1>& a,
+    std::shared_ptr<Tensor<i64>> CPUTensorOps<ScalarTypes...>::arg_min(const Tensor<ScalarT1>& a,
         std::vector<index_t>& dims, const bool keep_dim) const
     {
         auto result = std::make_shared<CPUTensor<index_t>>();
@@ -287,13 +283,13 @@ namespace Breeze {
             .set_is_reduction(true)
             .set_keep_keep_dim(keep_dim);
 
-        using IndexType = std::conditional_t<std::is_same_v<ScalarT1, float>, int32_t, index_t>;
-        auto iter = TensorIterator<ScalarT1, index_t>::reduce_op(*result, a, config);
+        using IndexType = std::conditional_t<std::is_same_v<ScalarT1, float>, i32, i64>;
+        auto iter = TensorIterator<ScalarT1, i64>::reduce_op(*result, a, config);
         iter.reduce_strided_for_each(
             []{
-                return MinArgData<ScalarT1,IndexType>();
+                return MinArgData<ScalarT1, IndexType>();
             },
-            [](MinArgData<ScalarT1,IndexType> *data, const ScalarT1 a_value) {
+            [](MinArgData<ScalarT1, IndexType> *data, const ScalarT1 a_value) {
                 if (a_value < data->min_vec[0])
                 {
                     data->min_vec[0] = a_value;
@@ -301,9 +297,8 @@ namespace Breeze {
                     ++data->begin_index;
                 }
             },
-            [](MinArgData<ScalarT1,IndexType>* data, const Vectorized<ScalarT1>& a_vec) {
+            [](MinArgData<ScalarT1, IndexType>* data, const Vectorized<ScalarT1>& a_vec) {
                 Vectorized<IndexType> curr_indices = Vectorized<IndexType>::arange(data->begin_index);
-                // 改为< 比较
                 auto mask = a_vec < data->min_vec;
                 // 更新最小值
                 data->min_vec = Vectorized<ScalarT1>::blendv(data->min_vec, a_vec, mask);
@@ -831,10 +826,7 @@ namespace Breeze {
         using ResultType = typename BinaryOpResultType<ScalarT1, ScalarT2>::type;
         auto result = std::make_shared<CPUTensor<ResultType>>();
         auto iter = TensorIterator<ScalarT1, ScalarT2>::binary_op(*result, a, b);
-
         //判断是否标量 得到标量的值 然后 直接把标量值操作
-
-
         iter.cpu_kernel_vec(
            [](ResultType* out_ptr, const ResultType a_value, const ResultType b_value) {
                *out_ptr = a_value - b_value;

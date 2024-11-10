@@ -48,9 +48,9 @@ namespace Breeze {
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> sum(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> prod(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor<index_t>> arg_max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<i64>> arg_max(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
-        [[nodiscard]] virtual std::shared_ptr<Tensor<index_t>> arg_min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
+        [[nodiscard]] virtual std::shared_ptr<Tensor<i64>> arg_min(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> mean(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> std(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const = 0;
         [[nodiscard]] virtual std::shared_ptr<Tensor<ScalarT1>> var(const Tensor<ScalarT1>& a, std::vector<index_t>& dims, bool keep_dim, bool unbiased) const = 0;
